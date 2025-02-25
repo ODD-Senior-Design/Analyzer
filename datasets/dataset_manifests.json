@@ -1,0 +1,13 @@
+[
+
+    {
+            
+        "provider": "roboflow",
+        "dataset_name": "my_dataset",
+        "workspace_id": "utkarsh-srivastava-o1ucd",
+        "project_id": "oral-disease-detection-1foqb",
+        "version": 1
+
+    }
+
+]
