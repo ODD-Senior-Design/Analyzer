@@ -47,9 +47,9 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True)
 
 # Define the neural network architecture
 
-class NeuralNetwork(torch.nn.Module):
+class CNN(torch.nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
-        super(NeuralNetwork, self).__init__()
+        super(CNN, self).__init__()
         self.fc1 = torch.nn.Linear(input_size, hidden_size)
         self.relu = torch.nn.ReLU()
         self.fc2 = torch.nn.Linear(hidden_size, output_size)
@@ -152,7 +152,7 @@ input_size = dataset.get_features_names().shape[0]
 hidden_size = 128
 output_size = len(dataset.get_target_names())
 
-model = NeuralNetwork(input_size, hidden_size, output_size)
+model = CNN(input_size, hidden_size, output_size)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 

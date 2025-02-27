@@ -9,6 +9,7 @@ numpy = "*"
 torch = "*"
 roboflow = "*"
 matplotlib = "*"
+flask = "*"
 
 [dev-packages]
 
