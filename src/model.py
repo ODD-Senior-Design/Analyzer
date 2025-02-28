@@ -52,7 +52,7 @@ class BinaryAlexNet( Module ):
         plt.ylabel( 'Loss' )
         plt.show()
 
-    def train_model( self, data: DataLoader, optimizer: Optimizer, criterion: Module, num_epochs: int = 10, compute_device: torch.device = torch.device( 'cpu' ), plot_loss: bool = True ) -> None:
+    def train_model( self, data: DataLoader, optimizer: Optimizer, criterion: Module, num_epochs: int = 10, compute_device: torch.device = torch.device( torch.device( 'cpu' ) ), plot_loss: bool = True ) -> None:
         self.to( compute_device )
         self.train()
 
@@ -74,7 +74,7 @@ class BinaryAlexNet( Module ):
             if plot_loss:
                 self.plot_loss( 'Training Loss' )
 
-    def evaluate_model( self, data: DataLoader, compute_device: torch.device = 'cpu' ) -> torch.Tensor:
+    def evaluate_model( self, data: DataLoader, compute_device: torch.device = torch.device( 'cpu' ) ) -> torch.Tensor:
         self.to( compute_device )
         self.eval()
         all_predictions: List[ float ] = []
@@ -91,3 +91,13 @@ class BinaryAlexNet( Module ):
         accuracy: float = accuracy_score( all_labels, all_predictions )
         print( f"Test Accuracy: { accuracy:.4f }" )
         return accuracy
+
+    def save_model( self, path: str ) -> None:
+        torch.save( self.state_dict(), path )
+        print( f"Model saved to { path }" )
+
+    def load_model( self, path: str, device: torch.device = torch.device( 'cpu' ) ) -> None:
+        self.load_state_dict( torch.load( path, map_location=device ) )
+        self.to( device )
+        self.eval()
+        print( f"Model loaded from { path }" )
