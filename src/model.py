@@ -1,16 +1,17 @@
-import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import torch
+from torch.utils.data import DataLoader
 from torch.optim import Optimizer
-from torch.nn import Module, Linear, ReLU, CrossEntropyLoss, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout
+from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout
+from typing import List
 
-class AlexNet( Module ):
+class BinaryAlexNet( Module ):
 
-    # From https://github.com/pytorch/vision/blob/main/torchvision/models/alexnet.py
-    def __init__( self, num_classes: int = 1000, dropout: float = 0.5 ) -> None:
+    #* From https://github.com/pytorch/vision/blob/main/torchvision/models/alexnet.py
+    #* Modified to be for binary classification
+    def __init__( self, dropout: float = 0.5 ) -> None:
         super().__init__()
-        self.features = Sequential(
+        self.__features = Sequential(
             Conv2d( 3, 64, kernel_size=11, stride=4, padding=2 ),
             ReLU( inplace=True ),
             MaxPool2d( kernel_size=3, stride=2 ),
@@ -25,30 +26,54 @@ class AlexNet( Module ):
             ReLU( inplace=True ),
             MaxPool2d( kernel_size=3, stride=2 )
         )
-        self.avgpool = AdaptiveAvgPool2d( ( 6, 6 ) )
-        self.classifier = Sequential(
+        self.__avgpool = AdaptiveAvgPool2d( ( 6, 6 ) )
+        self.__classifier = Sequential(
             Dropout( p=dropout ),
             Linear( 256 * 6 * 6, 4096 ),
             ReLU( inplace=True ),
             Dropout( p=dropout ),
             Linear( 4096, 4096 ),
             ReLU( inplace=True ),
-            Linear( 4096, num_classes ),
+            Linear( 4096, 1 ) #* 1 for Binary classification, otherwise should be equal to the number of classes
         )
 
+        self.__loss_values: List[ float ] = []
+
     def forward( self, x: torch.Tensor ) -> torch.Tensor:
-        x = self.features( x )
-        x = self.avgpool( x )
+        x = self.__features( x )
+        x = self.__avgpool( x )
         x = torch.flatten( x, 1 )
-        x = self.classifier( x )
+        x = self.__classifier( x )
         return x
 
-    #TODO: Implement this method and choose correct criterion, `CrossEntropyLoss` is a placeholder
-    def train( self, optimizer: Optimizer, criterion: CrossEntropyLoss, num_epochs: int = 1000 ):
-        pass
+    def plot_loss( self, title: str = 'Model Loss' ) -> None:
+        plt.plot( self.__loss_values, label=title )
+        plt.xlabel( 'Epochs' )
+        plt.ylabel( 'Loss' )
+        plt.show()
 
-    #TODO: Implement this method properly, this process is just a placeholder
-    def predict( self, datapoint: np.ndarray ) -> torch.Tensor:
-        datapoint_tensor = torch.from_numpy( datapoint ).float( )
-        prediction = self.forward( datapoint_tensor )
-        return torch.argmax( prediction, dim=1 )
+    def train_model( self, data: DataLoader, optimizer: Optimizer, criterion: Module, num_epochs: int = 10,  device: torch.device = torch.device( 'cpu' ), plot_loss: bool = True ) -> None:
+        self.to( device )
+        self.train()
+
+        for epoch in range( num_epochs ):
+            running_loss: float = 0.0
+
+            for inputs, labels in data:
+                inputs, labels = inputs.to( device ), labels.to( device )
+                optimizer.zero_grad()
+                outputs: BinaryAlexNet = self( inputs )
+                loss: Module = criterion( outputs.squeeze( 1 ), labels.float() )
+                loss.backward()
+                optimizer.step()
+                running_loss += loss.item()
+
+            self.__loss_values.append( running_loss / len(data) )
+            print( f'Epoch: { epoch + 1 } / { num_epochs }, Epoch Loss: { running_loss / len( data ):.4f }' )
+
+            if plot_loss:
+                self.plot_loss( 'Training Loss' )
+
+    #TODO: Implement this method properly
+    def evaluate_model( self ) -> torch.Tensor:
+        pass

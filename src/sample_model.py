@@ -1,211 +1,200 @@
 import torch
-import numpy as np
-import pandas as pd
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader, Dataset, random_split
+from torchvision import transforms, datasets
+from sklearn.metrics import accuracy_score
+from typing import List
 
-# Simulate a dataset with 1000 samples and 10 features
+class BinaryAlexNet(nn.Module):
+    def __init__(self, dropout: float = 0.5) -> None:
+        """
+        Initializes the Binary AlexNet model for binary classification.
 
-np.random.seed(0)
-X = np.random.rand(1000, 10)
-y = np.random.randint(0, 2, size=1000)
+        Args:
+            dropout (float): Dropout probability for regularization.
+        """
+        super().__init__()
 
-# Convert the numpy arrays to PyTorch tensors
+        self.features: nn.Sequential = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.Conv2d(64, 192, kernel_size=5, padding=2),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.Conv2d(192, 384, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(384, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2)
+        )
 
-X_tensor = torch.from_numpy(X).float()
-y_tensor = torch.from_numpy(y).long()
+        self.avgpool: nn.AdaptiveAvgPool2d = nn.AdaptiveAvgPool2d((6, 6))
 
-# Create a DataFrame from the features
+        self.classifier: nn.Sequential = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(256 * 6 * 6, 4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=dropout),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, 1),
+        )
 
-df = pd.DataFrame(X, columns=[f'feature_{i}' for i in range(1, 11)])
-df['target'] = y
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Defines the forward pass.
 
-# Create a PyTorch Dataset from the DataFrame
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, 3, 224, 224).
 
-class CustomDataset(torch.utils.data.Dataset):
-    def __init__(self, df):
-        self.df = df
-
-    def __len__(self):
-        return len(self.df)
-
-    def __getitem__(self, idx):
-        sample = self.df.iloc[idx]
-        features = sample.drop('target').values
-        target = sample['target']
-        return features, target
-
-    def get_features_names(self):
-        return list(self.df.drop('target', axis=1).columns)
-
-    def get_target_names(self):
-        return ['class_0', 'class_1']
-
-# Create a DataLoader from the Dataset
-
-dataset = CustomDataset(df)
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True)
-
-# Define the neural network architecture
-
-class CNN(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(CNN, self).__init__()
-        self.fc1 = torch.nn.Linear(input_size, hidden_size)
-        self.relu = torch.nn.ReLU()
-        self.fc2 = torch.nn.Linear(hidden_size, output_size)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.fc2(x)
+        Returns:
+            torch.Tensor: Output logits (before applying sigmoid).
+        """
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
         return x
 
-    def predict(self, X):
-        X_tensor = torch.from_numpy(X).float()
-        y_pred = self.forward(X_tensor)
-        return torch.argmax(y_pred, dim=1).numpy()
+    def train_model(self, train_loader: DataLoader, optimizer: optim.Optimizer, criterion: nn.Module, epochs: int = 10, device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")) -> None:
+        """
+        Trains the model.
 
-    def get_model_parameters(self):
-        return {
-            'input_size': self.fc1.in_features,
-            'hidden_size': self.fc1.out_features,
-            'output_size': self.fc2.out_features
-        }
+        Args:
+            train_loader (DataLoader): DataLoader for training data.
+            optimizer (optim.Optimizer): Optimizer for updating weights.
+            criterion (nn.Module): Loss function.
+            epochs (int): Number of epochs for training.
+            device (torch.device): Device to run training on.
+        """
+        self.to(device)
+        self.train()
+        loss_values: List[float] = []
 
-    def save_model(self, filename):
-        torch.save(self.state_dict(), filename)
-
-    def load_model(self, filename):
-        self.load_state_dict(torch.load(filename))
-
-    def evaluate(self, X, y):
-        y_pred = self.predict(X)
-        return np.mean(y_pred == y)
-
-    def train(self, optimizer, criterion, num_epochs):
-        for epoch in range(num_epochs):
+        for epoch in range(epochs):
             running_loss = 0.0
-            for inputs, labels in dataloader:
+            for inputs, labels in train_loader:
+                inputs, labels = inputs.to(device), labels.to(device).float().unsqueeze(1)
+
                 optimizer.zero_grad()
-                outputs = self.forward(inputs)
+                outputs = self(inputs)
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
-            print(f'Epoch {epoch+1}/{num_epochs}, Loss: {running_loss/len(dataloader):.4f}')
 
-    def predict_probabilities(self, X):
-        X_tensor = torch.from_numpy(X).float()
-        y_pred = self.forward(X_tensor)
-        return torch.softmax(y_pred, dim=1).detach().numpy()
+            avg_loss = running_loss / len(train_loader)
+            loss_values.append(avg_loss)
+            print(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}")
 
-    def get_feature_importances(self, X):
-        X_tensor = torch.from_numpy(X).float()
-        features = self.fc1.weight.detach().numpy()
-        importances = np.abs(features).mean(axis=0)
-        return importances
+        self.plot_loss(loss_values)
 
-    def plot_feature_importances(self, X, feature_names):
-        importances = self.get_feature_importances(X)
-        df_importances = pd.DataFrame({
-            'feature': feature_names,
-            'importance': importances
-        })
-        df_importances = df_importances.sort_values('importance', ascending=False)
-        df_importances.plot.bar(x='feature', y='importance', figsize=(12, 6))
+    def evaluate_model(self, test_loader: DataLoader, device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")) -> float:
+        """
+        Evaluates the model on test data.
+
+        Args:
+            test_loader (DataLoader): DataLoader for test data.
+            device (torch.device): Device to run evaluation on.
+
+        Returns:
+            float: Accuracy score.
+        """
+        self.to(device)
+        self.eval()
+        all_preds: List[float] = []
+        all_labels: List[float] = []
+
+        with torch.no_grad():
+            for inputs, labels in test_loader:
+                inputs, labels = inputs.to(device), labels.to(device).float().unsqueeze(1)
+                outputs = self(inputs)
+                predictions = (torch.sigmoid(outputs) > 0.5).float()
+                all_preds.extend(predictions.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+
+        accuracy: float = accuracy_score(all_labels, all_preds)
+        print(f"Test Accuracy: {accuracy:.4f}")
+        return accuracy
+
+    def plot_loss(self, loss_values: List[float]) -> None:
+        """
+        Plots the loss curve.
+
+        Args:
+            loss_values (List[float]): List of loss values per epoch.
+        """
+        plt.plot(loss_values, label='Training Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
         plt.show()
 
-    def get_confusion_matrix(self, X, y):
-        y_pred = self.predict(X)
-        cm = confusion_matrix(y, y_pred)
-        return cm
+    def save_model(self, path: str) -> None:
+        """
+        Saves the model state dictionary.
 
-    def plot_confusion_matrix(self, X, y):
-        cm = self.get_confusion_matrix(X, y)
-        df_cm = pd.DataFrame(cm, index=['class_0', 'class_1'], columns=['class_0', 'class_1'])
-        df_cm.index.name = 'Actual'
-        df_cm.columns.name = 'Predicted'
-        sns.heatmap(df_cm, annot=True, cmap='Blues', fmt='g')
-        plt.show()
+        Args:
+            path (str): Path to save the model.
+        """
+        torch.save(self.state_dict(), path)
+        print(f"Model saved to {path}")
 
-    def get_roc_auc_score(self, X, y):
-        y_pred_prob = self.predict_probabilities(X)[:, 1]
-        return roc_auc_score(y, y_pred_prob)
+    def load_model(self, path: str, device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")) -> None:
+        """
+        Loads the model state dictionary.
 
-    def plot_roc_auc_curve(self, X, y):
-        y_pred_prob = self.predict_probabilities(X)[:, 1]
-        fpr, tpr, _ = roc_curve(y, y_pred_prob)
-        auc_score = roc_auc_score(y, y_pred_prob)
-        plt.plot(fpr, tpr, label=f'AUC Score: {auc_score:.2f}')
-        plt.plot([0, 1], [0, 1], 'r--')
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver Operating Characteristic (ROC) Curve')
-        plt.legend(loc='lower right')
-        plt.show()
+        Args:
+            path (str): Path to load the model from.
+            device (torch.device): Device to load the model onto.
+        """
+        self.load_state_dict(torch.load(path, map_location=device))
+        self.to(device)
+        self.eval()
+        print(f"Model loaded from {path}")
 
-    # Add more methods as needed for model evaluation, training, and visualization
 
-# Usage example
+# ---- MAIN SCRIPT ----
+if __name__ == "__main__":
+    # Device configuration
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-input_size = dataset.get_features_names().shape[0]
-hidden_size = 128
-output_size = len(dataset.get_target_names())
+    # Hyperparameters
+    batch_size = 32
+    learning_rate = 0.0001
+    num_epochs = 10
 
-model = CNN(input_size, hidden_size, output_size)
+    # Data Transformations
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor()
+    ])
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # Dummy dataset (replace with real dataset)
+    dataset = datasets.FakeData(transform=transform)
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
-criterion = torch.nn.CrossEntropyLoss()
+    # Data Loaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-num_epochs = 10
+    # Model, Loss Function, Optimizer
+    model = BinaryAlexNet().to(device)
+    criterion = nn.BCEWithLogitsLoss()  # More numerically stable than BCELoss
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-model.train(optimizer, criterion, num_epochs)
+    # Train and Evaluate
+    model.train_model(train_loader, optimizer, criterion, num_epochs)
+    model.evaluate_model(test_loader)
 
-# Evaluate the model
-
-X_test = X[:100]
-y_test = y[:100]
-
-accuracy = model.evaluate(X_test, y_test)
-print(f'Test Accuracy: {accuracy:.2f}')
-
-# Save the model
-
-model.save_model('model.pt')
-
-# Load the model
-
-model.load_model('model.pt')
-
-# Make predictions
-
-X_new = X[101:200]
-y_pred = model.predict(X_new)
-print(f'Predicted Classes: {y_pred}')
-
-# Get model parameters
-
-model_parameters = model.get_model_parameters()
-print(f'Model Parameters: {model_parameters}')
-
-# Visualize feature importances
-
-X_train = X[:1000]
-feature_names = dataset.get_features_names()
-
-model.plot_feature_importances(X_train, feature_names)
-
-# Visualize confusion matrix
-
-y_train = y[:1000]
-
-model.plot_confusion_matrix(X_train, y_train)
-
-# Visualize ROC AUC curve
-
-y_train_prob = model.predict_probabilities(X_train)[:, 1]
-
-model.plot_roc_auc_curve(X_train, y_train)
-
-# Add more visualization methods as needed for model evaluation, training, and visualization
+    # Save and Load Example
+    model.save_model("binary_alexnet.pth")
+    model.load_model("binary_alexnet.pth")

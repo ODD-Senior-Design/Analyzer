@@ -1,4 +1,7 @@
 from roboflow import Roboflow
+from torchvision import transforms
+from torch.utils.data import DataLoader
+
 from typing import List, Dict, Union, Any
 import json
 
@@ -13,7 +16,7 @@ class DataHandler():
         with open( self.__dataset_manifest, 'r', encoding='utf-8' ) as f:
             return json.load( f )
 
-    def load_datasets( self ) -> Dict[ str, Any ]:
+    def unpack_datasets( self ) -> Dict[ str, Any ]:
         manifest = self.__deserialize_dataset_manifest()
         datasets = {}
         for dataset_metadata in manifest:
@@ -41,3 +44,7 @@ class DataHandler():
                     ] = dataset.images.download( self.__datasets_save_path )
 
         return datasets
+
+# TODO: Implement class to preprocess datasets for training, validation, etc.
+class Preproccesser():
+    pass
