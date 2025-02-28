@@ -8,6 +8,10 @@ pandas = "*"
 numpy = "*"
 torch = "*"
 roboflow = "*"
+matplotlib = "*"
+flask = "*"
+torchvision = "*"
+scikit-learn = "*"
 
 [dev-packages]
 
