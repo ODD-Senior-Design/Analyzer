@@ -3,10 +3,10 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout
+from sklearn.metrics import accuracy_score
 from typing import List
 
 class BinaryAlexNet( Module ):
-
     #* From https://github.com/pytorch/vision/blob/main/torchvision/models/alexnet.py
     #* Modified to be for binary classification
     def __init__( self, dropout: float = 0.5 ) -> None:
@@ -24,8 +24,8 @@ class BinaryAlexNet( Module ):
             ReLU( inplace=True ),
             Conv2d( 256, 256, kernel_size=3, padding=1 ),
             ReLU( inplace=True ),
-            MaxPool2d( kernel_size=3, stride=2 )
-        )
+            MaxPool2d( kernel_size=3, stride=2 ),
+      )
         self.__avgpool = AdaptiveAvgPool2d( ( 6, 6 ) )
         self.__classifier = Sequential(
             Dropout( p=dropout ),
@@ -34,10 +34,10 @@ class BinaryAlexNet( Module ):
             Dropout( p=dropout ),
             Linear( 4096, 4096 ),
             ReLU( inplace=True ),
-            Linear( 4096, 1 ) #* 1 for Binary classification, otherwise should be equal to the number of classes
-        )
-
+            Linear( 4096, 1 ),  # 1 for Binary classification, otherwise should be equal to the number of classes
+      )
         self.__loss_values: List[ float ] = []
+        self.__evaluation_function = torch.sigmoid
 
     def forward( self, x: torch.Tensor ) -> torch.Tensor:
         x = self.__features( x )
@@ -52,28 +52,42 @@ class BinaryAlexNet( Module ):
         plt.ylabel( 'Loss' )
         plt.show()
 
-    def train_model( self, data: DataLoader, optimizer: Optimizer, criterion: Module, num_epochs: int = 10,  device: torch.device = torch.device( 'cpu' ), plot_loss: bool = True ) -> None:
-        self.to( device )
+    def train_model( self, data: DataLoader, optimizer: Optimizer, criterion: Module, num_epochs: int = 10, compute_device: torch.device = torch.device( 'cpu' ), plot_loss: bool = True ) -> None:
+        self.to( compute_device )
         self.train()
 
         for epoch in range( num_epochs ):
             running_loss: float = 0.0
 
             for inputs, labels in data:
-                inputs, labels = inputs.to( device ), labels.to( device )
+                inputs, labels = inputs.to( compute_device ), labels.to( compute_device )
                 optimizer.zero_grad()
                 outputs: BinaryAlexNet = self( inputs )
-                loss: Module = criterion( outputs.squeeze( 1 ), labels.float() )
+                loss: Module = criterion( outputs, labels )
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
 
-            self.__loss_values.append( running_loss / len(data) )
+            self.__loss_values.append( running_loss / len( data ) )
             print( f'Epoch: { epoch + 1 } / { num_epochs }, Epoch Loss: { running_loss / len( data ):.4f }' )
 
             if plot_loss:
                 self.plot_loss( 'Training Loss' )
 
-    #TODO: Implement this method properly
-    def evaluate_model( self ) -> torch.Tensor:
-        pass
+    def evaluate_model( self, data: DataLoader, compute_device: torch.device = 'cpu' ) -> torch.Tensor:
+        self.to( compute_device )
+        self.eval()
+        all_predictions: List[ float ] = []
+        all_labels: List[ float ] = []
+
+        with torch.no_grad():
+            for inputs, labels in data:
+                inputs, labels = inputs.to( compute_device ), labels.to( compute_device ).float()
+                outputs: BinaryAlexNet = self( inputs )
+                predictions: torch.Tensor = ( self.__evaluation_function( outputs ) > 0.5 ).float()
+                all_predictions.extend( predictions.cpu().numpy() )
+                all_labels.extend( labels.cpu().numpy() )
+
+        accuracy: float = accuracy_score( all_labels, all_predictions )
+        print( f"Test Accuracy: { accuracy:.4f }" )
+        return accuracy
