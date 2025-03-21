@@ -12,7 +12,7 @@ class DataHandler():
         self.__datasets_save_path = datasets_save_path
         self.__dataset_manifest = dataset_manifest
 
-    def __deserialize_dataset_manifest( self ) -> List[ Dict[ str, Union[ str, int ] ] ]:
+    def __deserialize_dataset_manifest( self ) -> List[ Dict[ str, Any ] ]:
         with open( self.__dataset_manifest, 'r', encoding='utf-8' ) as f:
             return json.load( f )
 
@@ -21,7 +21,7 @@ class DataHandler():
         datasets = {}
         for dataset_metadata in manifest:
 
-            match dataset_metadata.get( 'provider', '' ).lower():
+            match dataset_metadata.get( 'provider', '' ):
 
                 case 'roboflow':
                     if not self.__rf:
@@ -47,4 +47,12 @@ class DataHandler():
 
 # TODO: Implement class to preprocess datasets for training, validation, etc.
 class Preproccesser():
-    pass
+    
+    # Sample preproccessing for alexnet
+    # preprocess = transforms.Compose([
+    #     transforms.Resize(256),
+    #     transforms.CenterCrop(224),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    # ])
+    

@@ -32,6 +32,7 @@
   - COMPILED_MODEL_PATH
   - BIND_ADDRESS
   - BIND_PORT
+  - DATETIME_FORMAT
 - training proccess with a environment flag
   - if combined dataset, then start training
   - else, auto run unpacking, if not present and prompt user to preprocess
@@ -52,3 +53,4 @@
 - COMPILED_MODEL_PATH: str
 - BIND_ADDRESS: str
 - BIND_PORT: int
+- DATETIME_FORMAT: str

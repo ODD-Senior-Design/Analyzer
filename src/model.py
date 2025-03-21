@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout
+from torchvision import transforms
 from sklearn.metrics import accuracy_score
 from typing import List
 
@@ -74,7 +75,7 @@ class BinaryAlexNet( Module ):
             if plot_loss:
                 self.plot_loss( 'Training Loss' )
 
-    def evaluate_model( self, data: DataLoader, compute_device: torch.device = torch.device( 'cpu' ) ) -> torch.Tensor:
+    def evaluate_model( self, data: DataLoader, compute_device: torch.device = torch.device( 'cpu' ) ) -> float:
         self.to( compute_device )
         self.eval()
         all_predictions: List[ float ] = []
@@ -91,6 +92,11 @@ class BinaryAlexNet( Module ):
         accuracy: float = accuracy_score( all_labels, all_predictions )
         print( f"Test Accuracy: { accuracy:.4f }" )
         return accuracy
+
+    def test_image( self, image_tensor: torch.Tensor ) -> bool:
+        with torch.no_grad():
+            output = self( image_tensor )
+            return ( self.__evaluation_function( output ).float() > 0.5 )
 
     def save_model( self, path: str ) -> None:
         torch.save( self.state_dict(), path )
