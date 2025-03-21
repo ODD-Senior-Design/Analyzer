@@ -1,13 +1,16 @@
 from roboflow import Roboflow
 from torchvision import transforms
 from torch.utils.data import DataLoader
+import torch
 
-from typing import List, Dict, Union, Any
+from PIL import ImageFile
+
+from typing import List, Dict, Optional, Any
 import json
 
-class DataHandler():
+class DataUnpacker():
 
-    def __init__( self, datasets_save_path: str, roboflow_api_key: str = None, dataset_manifest: str = '../datasets/dataset_manifests.json' ):
+    def __init__( self, datasets_save_path: str, roboflow_api_key: Optional[str] = None, dataset_manifest: str = '../datasets/dataset_manifests.json' ):
         self.__rf = Roboflow( api_key=roboflow_api_key ) if roboflow_api_key else None
         self.__datasets_save_path = datasets_save_path
         self.__dataset_manifest = dataset_manifest
@@ -47,12 +50,15 @@ class DataHandler():
 
 # TODO: Implement class to preprocess datasets for training, validation, etc.
 class Preproccesser():
-    
-    # Sample preproccessing for alexnet
-    # preprocess = transforms.Compose([
-    #     transforms.Resize(256),
-    #     transforms.CenterCrop(224),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    # ])
+
+    def __init__( self ) -> None:
+        self.__process_flow = transforms.Compose([
+            transforms.Resize( 256 ),
+            transforms.CenterCrop( 224 ),
+            transforms.ToTensor(),
+            transforms.Normalize( mean=[ 0.485, 0.456, 0.406 ], std=[ 0.229, 0.224, 0.225 ] )
+        ])
+        
+    def process( self, dataset: Any ) -> torch.Tensor:
+        return self.__process_flow( dataset )
     
