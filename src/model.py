@@ -1,3 +1,4 @@
+import os
 import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import DataLoader
@@ -102,8 +103,15 @@ class BinaryAlexNet( Module ):
         torch.save( self.state_dict(), path )
         print( f"Model saved to { path }" )
 
-    def load_model( self, path: str, device: torch.device = torch.device( 'cpu' ) ) -> None:
-        self.load_state_dict( torch.load( path, map_location=device ) )
+    def load_model( self, model_path: str, device: torch.device = torch.device( 'cpu' ) ) -> None:
+        
+        if not model_path.endswith( '.pth' ):
+            raise ValueError( 'Model file must be a PyTorch (.pth) file' )
+        
+        if not os.path.exists( model_path ):
+            raise FileNotFoundError( f'Model file not found at { model_path }' )
+        
+        self.load_state_dict( torch.load( model_path, map_location=device ) )
         self.to( device )
         self.eval()
-        print( f"Model loaded from { path }" )
+        print( f"Model loaded from { model_path }" )

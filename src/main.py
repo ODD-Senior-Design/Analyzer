@@ -8,7 +8,7 @@ from typing import Dict, Optional, Any
 
 from flask import Flask, Response, jsonify, request
 
-from model import BinaryAlexNet
+from model import BinaryAlexNet, torch
 from data_handler import DataUnpacker, Preproccesser, DataLoader
 
 datetime_format: str = getenv( "DATETIME_FORMAT" ) or '%Y-%m-%dT%H:%M:%S'
@@ -25,34 +25,25 @@ debug: bool = getenv( "DEBUG" ) == '1'
 bind_address: str = getenv( "BIND_ADDRESS" ) or '0.0.0.0'
 bind_port: int = int( getenv( "BIND_PORT" ) or 9000 )
 
+model = BinaryAlexNet()
+
 @webhook.route( "/analyze", methods=[ "POST" ] )
 def analyze_image_webhook() -> Response:
     image_metadata: Dict[ str, str ] = request.get_json()
     image_path = image_metadata.get( 'uri', '' ).replace( 'file:///', '/' )
 
     # Analyze image and propogate errors
-    assessment: bool = analyze_image( image_path, compiled_model_path )
+    assessment: bool = analyze_image( image_path )
 
     return jsonify( { 'assessment': assessment, 'assessment_timestamp': datetime.now().strftime( datetime_format ) } )
 
-def analyze_image( image_path: str, trained_model_save_path: str ) -> bool:
+def analyze_image( image_path: str ) -> bool:
     image = Image.open( image_path )
-
-    model = BinaryAlexNet()
-    model.load_model( trained_model_save_path )
 
     preprocess = Preproccesser()
     image_tensor = preprocess.process( image )
     image_tensor = image_tensor.unsqueeze( 0 )
     return model.test_image( image_tensor )
-
-# TODO: Implement function to train the model and save it to the compiled_model_path
-def start_training() -> Any:
-    pass
-
-# TODO: Implement function to evaluate the model and save metrics to the evaluation_metrics_path
-def start_evaluation() -> Any:
-    pass
 
 def validate_combined_dataset() -> None:
     if path.exists( f'{ datasets_path }/combined_datasets' ):
@@ -73,23 +64,42 @@ def validate_combined_dataset() -> None:
     print( 'Datasets unpacked successfully! Please manually verify and combine datasets into a "combined_datasets" directory before training' )
     exit( 0 )
 
+# TODO: Implement function to train the model and save it to the compiled_model_path
+def start_training() -> None:
+    validate_combined_dataset()
+
+    # TODO: Implement training loop and save model periodically
+
+# TODO: Implement function to evaluate the model and save metrics to the evaluation_metrics_path
+def start_evaluation() -> None:
+    print( 'Loading Model...' )
+    model.load_model( compiled_model_path )
+
+    # TODO: Implement evaluation loop and save metrics periodically
+
+# TODO: Implement function to load the trained model and start the analyzer
+def start_analyzer() -> None:
+    print( 'Loading Model...' )
+    model.load_model( compiled_model_path )
+
+    print( 'Starting Webhook...' )
+    webhook.run( host=bind_address, port=bind_port, debug=debug )
+
 def main() -> None:
     print( 'Loading .env file if present...' )
     load_dotenv()
 
     if train:
-        print( 'Starting training...' )
-        validate_combined_dataset()
+        print( 'Starting Training...' )
         start_training()
 
     elif evaluate:
-        print( 'Starting evaluation...' )
+        print( 'Starting Evaluation...' )
         start_evaluation()
 
     else:
         print( 'Starting Analyzer...' )
-        print( 'Starting Webhook...' )
-        webhook.run( host=bind_address, port=bind_port, debug=debug )
+        start_analyzer()
 
 if __name__ == "__main__":
     main()
