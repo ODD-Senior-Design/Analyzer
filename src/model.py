@@ -104,13 +104,13 @@ class BinaryAlexNet( Module ):
         print( f"Model saved to { path }" )
 
     def load_model( self, model_path: str, device: torch.device = torch.device( 'cpu' ) ) -> None:
-        
+
         if not model_path.endswith( '.pth' ):
             raise ValueError( 'Model file must be a PyTorch (.pth) file' )
-        
+
         if not os.path.exists( model_path ):
             raise FileNotFoundError( f'Model file not found at { model_path }' )
-        
+
         self.load_state_dict( torch.load( model_path, map_location=device ) )
         self.to( device )
         self.eval()

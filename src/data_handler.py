@@ -3,7 +3,8 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 import torch
 
-from PIL import ImageFile
+from glob import glob
+from PIL import Image, ImageFile
 
 from os import path
 from typing import List, Dict, Optional, Any
@@ -50,6 +51,18 @@ class DataUnpacker():
                             f'my_dataset_{ manifest.index( dataset_metadata ) }',
                         )
                     ] = dataset.images.download( self.__datasets_save_path )
+
+                case 'local':
+                    dataset_path = dataset_metadata.get( 'dataset_path' )
+
+                    if not dataset_path or not path.exists( dataset_path ):
+                        raise FileNotFoundError( f'Dataset not found at { dataset_path }' )
+                    datasets[
+                        dataset_metadata.get(
+                            'dataset_name',
+                            f'my_dataset_{ manifest.index( dataset_metadata ) }',
+                        )
+                    ] = [ Image.open( img ) for img in glob( f'{ dataset_path }/*' ) ]
 
         return datasets
 
