@@ -54,24 +54,24 @@ class BinaryAlexNet( Module ):
         plt.ylabel( 'Loss' )
         plt.show()
 
-    def train_model( self, data: DataLoader, optimizer: Optimizer, criterion: Module, num_epochs: int = 10, compute_device: torch.device = torch.device( torch.device( 'cpu' ) ), plot_loss: bool = True ) -> None:
+    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, compute_device: torch.device = torch.device( torch.device( 'cpu' ) ), plot_loss: bool = True ) -> None:
         self.to( compute_device )
         self.train()
 
         for epoch in range( num_epochs ):
             running_loss: float = 0.0
 
-            for inputs, labels in data:
+            for inputs, labels in dataset:
                 inputs, labels = inputs.to( compute_device ), labels.to( compute_device )
                 optimizer.zero_grad()
                 outputs: BinaryAlexNet = self( inputs )
-                loss: Module = criterion( outputs, labels )
+                loss: Module = loss_fn( outputs, labels )
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
 
-            self.__loss_values.append( running_loss / len( data ) )
-            print( f'Epoch: { epoch + 1 } / { num_epochs }, Epoch Loss: { running_loss / len( data ):.4f }' )
+            self.__loss_values.append( running_loss / len( dataset ) )
+            print( f'Epoch: { epoch + 1 } / { num_epochs }, Epoch Loss: { running_loss / len( dataset ):.4f }' )
 
             if plot_loss:
                 self.plot_loss( 'Training Loss' )

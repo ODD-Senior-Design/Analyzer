@@ -8,17 +8,24 @@ from typing import Dict, Optional, Any
 
 from flask import Flask, Response, jsonify, request
 
+from torch.optim import Adam
+from torch.nn import CrossEntropyLoss
+
 from model import BinaryAlexNet, torch
-from data_handler import DataUnpacker, Preproccesser, DataLoader
+from data_handler import DataUnpacker, Preproccessor, DataLoader
 
 datetime_format: str = getenv( "DATETIME_FORMAT" ) or '%Y-%m-%dT%H:%M:%S'
 
 datasets_path: str = getenv( "DATASETS_PATH" ) or './datasets'
 roboflow_api_key: Optional[ str ] = getenv( "ROBOFLOW_API_KEY" )
 compiled_model_path: str = getenv( "COMPILED_MODEL_PATH" ) or './saved_models/model/model.pt'
-evaluation_metrics_path: str = getenv( "EVALUATION_METRICS_PATH" ) or './model/model_evaluation_metrics.json'
+
 evaluate: bool = getenv( "EVALUATE" ) == '1'
+evaluation_metrics_path: str = getenv( "EVALUATION_METRICS_PATH" ) or './model/model_evaluation_metrics.json'
+
 train: bool = getenv( "TRAIN" ) == '1'
+training_learning_rate: float = float( getenv( "TRAINING_LEARNING_RATE" ) or '0.001' )
+training_epocs: int = int( getenv( "TRAINING_EPOCHS" ) or '10' )
 
 webhook: Flask = Flask( getenv( "WEBHOOK_NAME" ) or 'Analyzer webhook' )
 debug: bool = getenv( "DEBUG" ) == '1'
@@ -30,7 +37,7 @@ model = BinaryAlexNet()
 @webhook.route( "/analyze", methods=[ "POST" ] )
 def analyze_image_webhook() -> Response:
     image_metadata: Dict[ str, str ] = request.get_json()
-    image_path = image_metadata.get( 'uri', '' ).replace( 'file:///', '/' )
+    image_path = image_metadata.get( 'uri', '' ).strip( 'file://' )
 
     # Analyze image and propogate errors
     assessment: bool = analyze_image( image_path )
@@ -40,7 +47,7 @@ def analyze_image_webhook() -> Response:
 def analyze_image( image_path: str ) -> bool:
     image = Image.open( image_path )
 
-    preprocess = Preproccesser()
+    preprocess = Preproccessor()
     image_tensor = preprocess.process( image )
     image_tensor = image_tensor.unsqueeze( 0 )
     return model.test_image( image_tensor )
@@ -66,9 +73,19 @@ def validate_combined_dataset() -> None:
 
 # TODO: Implement function to train the model and save it to the compiled_model_path
 def start_training() -> None:
+    print( 'Validating Combined Dataset...' )
     validate_combined_dataset()
 
-    # TODO: Implement training loop and save model periodically
+    print( 'Loading and preprocessing dataset...' )
+    dataset_unpacker = DataUnpacker( datasets_save_path=datasets_path, roboflow_api_key=roboflow_api_key )
+    combined_dataset_dataloader = dataset_unpacker.get_combined_dataset_dataloader( f'{ datasets_path }/combined_datasets' )
+
+    print( 'Training Model...' )
+    model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate ), loss_fn=CrossEntropyLoss(), num_epochs=10 )
+
+    print( 'Training Model Completed!' )
+    model.save_model( compiled_model_path )
+    print( 'Model state dict saved to:', compiled_model_path )
 
 # TODO: Implement function to evaluate the model and save metrics to the evaluation_metrics_path
 def start_evaluation() -> None:
