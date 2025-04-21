@@ -4,49 +4,64 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout
-from torchvision import transforms
 from sklearn.metrics import accuracy_score
-from typing import List
+from typing import List, Optional, Type, Dict, Any
 
-class BinaryAlexNet( Module ):
-    #* From https://github.com/pytorch/vision/blob/main/torchvision/models/alexnet.py
-    #* Modified to be for binary classification
-    def __init__( self, dropout: float = 0.5 ) -> None:
+class CNN( Module ):
+
+    def __init__( self, model_class: Optional[ Type[ Module ] ] = None, model_kwargs: Optional[ Dict[ str, Any ] ] = None, evaluation_function = torch.sigmoid ) -> None:
         super().__init__()
-        self.__features = Sequential(
-            Conv2d( 3, 64, kernel_size=11, stride=4, padding=2 ),
-            ReLU( inplace=True ),
-            MaxPool2d( kernel_size=3, stride=2 ),
-            Conv2d( 64, 192, kernel_size=5, padding=2 ),
-            ReLU( inplace=True ),
-            MaxPool2d( kernel_size=3, stride=2 ),
-            Conv2d( 192, 384, kernel_size=3, padding=1 ),
-            ReLU( inplace=True ),
-            Conv2d( 384, 256, kernel_size=3, padding=1 ),
-            ReLU( inplace=True ),
-            Conv2d( 256, 256, kernel_size=3, padding=1 ),
-            ReLU( inplace=True ),
-            MaxPool2d( kernel_size=3, stride=2 ),
-      )
-        self.__avgpool = AdaptiveAvgPool2d( ( 6, 6 ) )
-        self.__classifier = Sequential(
-            Dropout( p=dropout ),
-            Linear( 256 * 6 * 6, 4096 ),
-            ReLU( inplace=True ),
-            Dropout( p=dropout ),
-            Linear( 4096, 4096 ),
-            ReLU( inplace=True ),
-            Linear( 4096, 1 ),  # 1 for Binary classification, otherwise should be equal to the number of classes
-      )
         self.__loss_values: List[ float ] = []
-        self.__evaluation_function = torch.sigmoid
+        self.__evaluation_function = evaluation_function
+
+        if model_class is None:
+            model_class = self.BinaryAlexNet
+
+        if model_kwargs is None:
+            model_kwargs = {}
+
+        self.model: Module = model_class( **model_kwargs )
+
+    class BinaryAlexNet( Module ):
+        #* From https://github.com/pytorch/vision/blob/main/torchvision/models/alexnet.py
+        #* Modified to be for binary classification
+        def __init__( self, dropout: float = 0.5 ) -> None:
+            super().__init__()
+            self.__features = Sequential(
+                Conv2d( 3, 64, kernel_size=11, stride=4, padding=2 ),
+                ReLU( inplace=True ),
+                MaxPool2d( kernel_size=3, stride=2 ),
+                Conv2d( 64, 192, kernel_size=5, padding=2 ),
+                ReLU( inplace=True ),
+                MaxPool2d( kernel_size=3, stride=2 ),
+                Conv2d( 192, 384, kernel_size=3, padding=1 ),
+                ReLU( inplace=True ),
+                Conv2d( 384, 256, kernel_size=3, padding=1 ),
+                ReLU( inplace=True ),
+                Conv2d( 256, 256, kernel_size=3, padding=1 ),
+                ReLU( inplace=True ),
+                MaxPool2d( kernel_size=3, stride=2 ),
+            )
+            self.__avgpool = AdaptiveAvgPool2d( ( 6, 6 ) )
+            self.__classifier = Sequential(
+                Dropout( p=dropout ),
+                Linear( 256 * 6 * 6, 4096 ),
+                ReLU( inplace=True ),
+                Dropout( p=dropout ),
+                Linear( 4096, 4096 ),
+                ReLU( inplace=True ),
+                Linear( 4096, 1 ),
+            )
+
+        def forward( self, x: torch.Tensor ) -> torch.Tensor:
+            x = self.__features( x )
+            x = self.__avgpool( x )
+            x = torch.flatten( x, 1 )
+            x = self.__classifier( x )
+            return x
 
     def forward( self, x: torch.Tensor ) -> torch.Tensor:
-        x = self.__features( x )
-        x = self.__avgpool( x )
-        x = torch.flatten( x, 1 )
-        x = self.__classifier( x )
-        return x
+        return self.model( x )
 
     def plot_loss( self, title: str = 'Model Loss' ) -> None:
         plt.plot( self.__loss_values, label=title )
@@ -54,7 +69,7 @@ class BinaryAlexNet( Module ):
         plt.ylabel( 'Loss' )
         plt.show()
 
-    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, compute_device: torch.device = torch.device( torch.device( 'cpu' ) ), plot_loss: bool = True ) -> None:
+    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, compute_device: torch.device = torch.device( 'cpu' ), plot_loss: bool = True ) -> None:
         self.to( compute_device )
         self.train()
 
@@ -64,7 +79,7 @@ class BinaryAlexNet( Module ):
             for inputs, labels in dataset:
                 inputs, labels = inputs.to( compute_device ), labels.to( compute_device )
                 optimizer.zero_grad()
-                outputs: BinaryAlexNet = self( inputs )
+                outputs: torch.Tensor = self( inputs )
                 loss: Module = loss_fn( outputs, labels )
                 loss.backward()
                 optimizer.step()
@@ -85,7 +100,7 @@ class BinaryAlexNet( Module ):
         with torch.no_grad():
             for inputs, labels in data:
                 inputs, labels = inputs.to( compute_device ), labels.to( compute_device ).float()
-                outputs: BinaryAlexNet = self( inputs )
+                outputs: torch.Tensor = self( inputs )
                 predictions: torch.Tensor = ( self.__evaluation_function( outputs ) > 0.5 ).float()
                 all_predictions.extend( predictions.cpu().numpy() )
                 all_labels.extend( labels.cpu().numpy() )
@@ -96,7 +111,7 @@ class BinaryAlexNet( Module ):
 
     def test_image( self, image_tensor: torch.Tensor ) -> bool:
         with torch.no_grad():
-            output = self( image_tensor )
+            output: torch.Tensor = self( image_tensor )
             return ( self.__evaluation_function( output ).float() > 0.5 )
 
     def save_model( self, path: str ) -> None:

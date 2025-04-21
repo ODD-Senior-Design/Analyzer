@@ -11,7 +11,7 @@ from flask import Flask, Response, jsonify, request
 from torch.optim import Adam
 from torch.nn import CrossEntropyLoss
 
-from model import BinaryAlexNet, torch
+from model import CNN, torch
 from data_handler import DataUnpacker, Preproccessor, DataLoader
 
 datetime_format: str = getenv( "DATETIME_FORMAT" ) or '%Y-%m-%dT%H:%M:%S'
@@ -32,7 +32,7 @@ debug: bool = getenv( "DEBUG" ) == '1'
 bind_address: str = getenv( "BIND_ADDRESS" ) or '0.0.0.0'
 bind_port: int = int( getenv( "BIND_PORT" ) or 9000 )
 
-model = BinaryAlexNet()
+model = CNN()
 
 @webhook.route( "/analyze", methods=[ "POST" ] )
 def analyze_image_webhook() -> Response:
