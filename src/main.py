@@ -4,15 +4,15 @@ from warnings import warn
 
 from PIL import Image
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
 
 from flask import Flask, Response, jsonify, request
 
 from torch.optim import Adam
 from torch.nn import CrossEntropyLoss
 
-from model import CNN, torch
-from data_handler import DataUnpacker, Preproccessor, DataLoader
+from model import CNN
+from data_handler import DataUnpacker, Preproccessor
 
 datetime_format: str = getenv( "DATETIME_FORMAT" ) or '%Y-%m-%dT%H:%M:%S'
 

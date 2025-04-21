@@ -1,4 +1,5 @@
 from warnings import warn
+from dotenv import load_dotenv
 from roboflow import Roboflow
 from torchvision import transforms
 from torch.utils.data import DataLoader
@@ -9,8 +10,8 @@ from PIL import Image
 import numpy as np
 
 from concurrent.futures import ThreadPoolExecutor
-from os import mkdir, path, listdir, remove
-from shutil import copy as copy_file
+from os import getenv, mkdir, path, listdir, remove
+from shutil import copy as copy_file, rmtree
 from typing import List, Dict, Optional, Any
 import json
 import yaml
@@ -35,7 +36,7 @@ class Preproccessor():
 class DataUnpacker():
 
     def __init__( self, datasets_save_path: str, roboflow_api_key: Optional[ str ] = None ):
-        self.__rf = Roboflow( api_key=roboflow_api_key, model_format='yolov5' ) if roboflow_api_key else None
+        self.__rf = Roboflow( api_key=roboflow_api_key, model_format='folder' ) if roboflow_api_key else None
         self.__datasets_save_path = datasets_save_path
         self.__dataset_manifest = f'{ datasets_save_path }/datasets_manifest.json'
 
@@ -56,11 +57,16 @@ class DataUnpacker():
             else { cl: class_names.index( cl ) for cl in class_names }
         )
 
-    def __filter_worker( self, root_path: str, class_indicies: set[ int ], in_place: bool ):
+    def __filter_worker_yolo( self, root_path: str, class_labels: List[ str ], in_place: bool ):
+        class_indicies = self.__get_class_indices( f'{ root_path }/../data.yaml', class_labels )
+        if len( class_indicies ) != len( class_labels ):
+            raise ValueError( f'Not all labels were found....perhaps a typo?\nRequested Labels:\n{ class_labels }\n\nMatched Labels:\n{ class_indicies }\n\nAvailable labels:\n{ self.__get_class_indices( f'{ root_path }/../data.yaml' ) }' )
+
+        class_indicies = set( class_indicies.values() )
         labels_dir = f'{ root_path }/labels'
         images_dir = f'{ root_path }/images'
-        filtered_labels_dir = labels_dir if in_place else f'{ path.basename( root_path ) }/labels'
-        filtered_images_dir = images_dir if in_place else f'{ path.basename( root_path ) }/images'
+        filtered_labels_dir = labels_dir if in_place else f'{ path.basename( root_path ) }/filtered_labels'
+        filtered_images_dir = images_dir if in_place else f'{ path.basename( root_path ) }/filtered_images'
         delete_labels = set()
         delete_images = set()
 
@@ -91,31 +97,50 @@ class DataUnpacker():
 
             if in_place:
                 for image_file, label_file in zip( delete_images, delete_labels ):
-                    remove( image_file )
-                    remove( label_file )
+                    if path.exists( image_file ):
+                        remove( image_file )
+                    if path.exists( label_file ):
+                        remove( label_file )
 
+    def __filter_worker_folder( self, root_path: str, class_labels: List[ str ], in_place: bool = True ) -> None:
 
-    def __filter( self, dataset_path: str, labels: List, in_place: bool = False ) -> None:
-        if not path.exists( f'{ dataset_path }/data.yaml' ):
-            raise FileNotFoundError( f"There is no 'data.yaml' in '{ dataset_path }', please have dataset in YOLO format." )
+        if not in_place:
+            warn( 'Images must be filtered in place for this format' )
 
-        class_indicies = self.__get_class_indices( f'{ dataset_path }/data.yaml', labels )
-        print( f'Got matching indicies for: { class_indicies }' )
-        if len( class_indicies ) != len( labels ):
-            raise ValueError( f'Not all labels were found....perhaps a typo? Matched Labels:\n{ class_indicies }\n\nAvailable labels:\n{ self.__get_class_indices( f'{ dataset_path }/data.yaml' ) }' )
+        if any( label not in listdir( root_path ) for label in class_labels ):
+            matched_labels = [ label for label in class_labels if label in listdir( root_path ) ]
+            raise ValueError( f'Not all labels were found....perhaps a typo?\nRequested Labels:\n{ class_labels }\n\nMatched Labels:\n{ matched_labels }\n\nAvailable labels:\n{ class_labels }' )
 
-        class_indicies = set( class_indicies.values() )
+        dirs = { name for name in listdir( root_path ) if path.isdir(f'{ root_path }/{ name }') }
 
-        if not path.exists( f'{ dataset_path }/train' ) or not path.exists( f'{ dataset_path }/valid' ) or not path.exists( f'{ dataset_path }/test' ):
-            raise FileNotFoundError( "Please have the dataset in YOLO format with a 'train','valid', and 'test' directory under the root directory of the datset." )
+        dirs.difference_update( class_labels )
 
-        splits = [ 'train', 'valid', 'test' ]
+        for dir in dirs:
+            if path.exists( f'{ root_path }/{ dir }' ):
+                rmtree( f'{ root_path }/{ dir }' )
+
+    def __filter( self, dataset_path: str, labels: List, in_place: bool = False, dataset_format = 'folder' ) -> None:
+        if not path.exists( f'{ dataset_path }/data.yaml' ) and 'yolo' in dataset_format:
+            warn( f"There is no 'data.yaml' in '{ dataset_path }', dataset not in YOLOv5 format, assuming folder format" )
+            dataset_format = 'folder'
+
+        splits = [ 'train', 'test' ]
+
+        if not path.exists( f'{ dataset_path }/train' ):
+            raise FileNotFoundError( "Please have the dataset in YOLO format with atleast a 'train' and 'test' directory under the root directory of the datset. Optionally include a 'valid' directory." )
+        
+        if not path.exists( f'{ dataset_path }/test' ):
+            warn( "No 'test' directory found. Highly reccomended to include one. Will continue to only filter 'train' directory" )
+            splits.pop()
+
+        if path.exists( f'{ dataset_path }/valid' ):
+            splits.append( 'valid' )
+
+        worker = self.__filter_worker_yolo if 'yolo' in dataset_format else self.__filter_worker_folder
 
         with ThreadPoolExecutor( max_workers=3 ) as executor:
 
-            futures = [
-                executor.submit( self.__filter_worker, f'{ dataset_path }/{ split }', class_indicies, in_place ) for split in splits
-            ]
+            futures = [ executor.submit( worker, f'{ dataset_path }/{ split }', labels, in_place ) for split in splits ]
 
             for future in futures:
                 future.result()
@@ -145,12 +170,16 @@ class DataUnpacker():
                     project = self.__rf.workspace( workspace_id ).project( project_id )
                     version = int( dataset_metadata.get( 'version', 1 ) )
                     dataset = project.version( version )
-                    dataset.download( location=self.__datasets_save_path )
 
-                    dataset_path = f'{ self.__datasets_save_path }/{ project_id }'
+                    print( f'Loaded { workspace_id }-{ project_id }-{ version }' )
+
+                    dataset_path = f'{ path.abspath( self.__datasets_save_path ) }/{ project_id }-{ version }'
+                    dataset_format: Optional[ str ] = dataset_metadata.get( 'format' )
+                    dataset.download( location = dataset_path, model_format=dataset_format, overwrite=dataset_metadata.get( 'overwrite', 1 ) == 1 )
 
                     if filter_labels:
-                        self.__filter( dataset_path, filter_labels, filter_in_place )
+                        self.__filter( dataset_path, filter_labels, filter_in_place, dataset_format or 'folder' )
+                        print( 'Filtered Dataset\n' )
 
                     dataset_paths.append( dataset_path )
 
@@ -189,3 +218,17 @@ class DataUnpacker():
         transform = Preproccessor().get_transform() if preprocess else None
         combined_dataset = self.CombinedDataset( combined_dataset_path, transform )
         return DataLoader( dataset=combined_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers )
+
+def unpack( datasets_path: str, roboflow_api_key: Optional[ str ] = None ):
+    if not roboflow_api_key:
+        warn( 'Environment variable "ROBOFLOW_API_KEY" is not set. Keep in mind using Roboflow as a provider is not possible then.' )
+
+    dataset_unpacker = DataUnpacker( datasets_save_path=datasets_path, roboflow_api_key=roboflow_api_key )
+    dataset_unpacker.unpack_datasets()
+
+    print( 'Datasets unpacked successfully! Please manually verify and combine datasets into a "combined_datasets" directory before training' )
+    exit( 0 )
+
+if __name__ == '__main__':
+    load_dotenv()
+    unpack( roboflow_api_key=getenv( "ROBOFLOW_API_KEY" ), datasets_path = getenv( "DATASETS_PATH", './datasets' ) )
