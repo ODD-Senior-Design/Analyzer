@@ -155,7 +155,7 @@ class DataUnpacker():
         except FileNotFoundError:
             return f"File not found: { image_path }"
         except Exception as e:
-            return f"Error deleting { image_path }: { e }" #! 433_1_jpg.rf.ec625197216f206783d6c12e2fca079f (Test if deleted)
+            return f"Error deleting { image_path }: { e }"
 
     def __clean( self, remove_list: str, max_workers: int = 8 ) -> None:
         removal_df = pd.read_csv( remove_list )

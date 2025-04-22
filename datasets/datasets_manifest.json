@@ -30,11 +30,28 @@
     {
 
         "provider": "roboflow",
-        "workspace_id": "oddseniordesign",
-        "project_id": "hihi-qaooi-0y7cc",
+        "workspace_id": "1sep208panisara-triamrangsee",
+        "project_id": "gingivitis-lz44o",
+        "version": 2,
+        "filter_labels": [ "Healthy" ]
+
+    },
+    {
+
+        "provider": "roboflow",
+        "workspace_id": "1sep208panisara-triamrangsee",
+        "project_id": "gingivitis-sllxc",
+        "version": 2,
+        "filter_labels": [ "Healthy" ]
+
+    },
+    {
+
+        "provider": "roboflow",
+        "workspace_id": "1sep208panisara-triamrangsee",
+        "project_id": "oralc-ovpss",
         "version": 1,
-        "format": "yolov5pytorch",
-        "filter_labels": [ "healthy" ]
+        "filter_labels": [ "Healthy" ]
 
     }
 
