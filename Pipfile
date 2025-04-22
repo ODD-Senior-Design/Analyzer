@@ -4,7 +4,6 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pandas = "*"
 numpy = "*"
 torch = "*"
 roboflow = "*"
@@ -12,6 +11,7 @@ matplotlib = "*"
 flask = "*"
 torchvision = "*"
 scikit-learn = "*"
+pandas = "*"
 
 [dev-packages]
 

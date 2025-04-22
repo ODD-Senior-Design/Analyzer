@@ -12,7 +12,9 @@ from torch.optim import Adam
 from torch.nn import CrossEntropyLoss
 
 from model import CNN
-from data_handler import DataUnpacker, Preproccessor
+from data_handler import DataUnpacker, Preproccessor, unpack
+
+dry_run_datasets: bool = getenv( 'DRY_RUN_DATASETS' ) == 1
 
 datetime_format: str = getenv( "DATETIME_FORMAT" ) or '%Y-%m-%dT%H:%M:%S'
 
@@ -56,22 +58,14 @@ def validate_combined_dataset() -> None:
     if path.exists( f'{ datasets_path }/combined_datasets' ):
         return
 
-    print( f'Combined dataset not present at path: "{ datasets_path }/combined_datasets"' )
-    print( 'Please set "datasets_path" environment variable to point to the directory where the "combined_datasets" directory' )
+    warn( f'Combined dataset not present at path: "{ datasets_path }/combined_datasets"', UserWarning )
+    warn( 'Please set "datasets_path" environment variable to point to the directory where the "combined_datasets" directory', UserWarning )
 
-    if input( 'Otherwise, auto unpack datasets to set directory? [y/N]' ).lower() != 'y':
+    if input( 'Otherwise, auto unpack datasets to set directory? [y/N] ' ).lower() != 'y':
         exit( 0 )
 
-    if not roboflow_api_key:
-        warn( 'Environment variable "ROBOFLOW_API_KEY" is not set. Keep in mind using Roboflow as a provider is not possible then.' )
+    unpack( datasets_path, roboflow_api_key, dry_run_datasets )
 
-    dataset_unpacker = DataUnpacker( datasets_save_path=datasets_path, roboflow_api_key=roboflow_api_key )
-    dataset_unpacker.unpack_datasets()
-
-    print( 'Datasets unpacked successfully! Please manually verify and combine datasets into a "combined_datasets" directory before training' )
-    exit( 0 )
-
-# TODO: Implement function to train the model and save it to the compiled_model_path
 def start_training() -> None:
     print( 'Validating Combined Dataset...' )
     validate_combined_dataset()
@@ -94,7 +88,6 @@ def start_evaluation() -> None:
 
     # TODO: Implement evaluation loop and save metrics periodically
 
-# TODO: Implement function to load the trained model and start the analyzer
 def start_analyzer() -> None:
     print( 'Loading Model...' )
     model.load_model( compiled_model_path )
