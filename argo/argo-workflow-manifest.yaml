@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argo-analyzer
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: argo-analyzer-pv
+  namespace: argo-analyzer
+spec:
+  storageClassName: nfs
+  volumeMode: Filesystem
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - hard
+  nfs:
+    path: /media/k8-data/argo/analyzer
+    server: 192.168.1.25
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argo-analyzer-data
+  namespace: argo-analyzer
+spec:
+  storageClassName: nfs
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: argo-analyzer-train-env
+  namespace: argo-analyzer
+spec:
+  entrypoint: train-model
+  volumes:
+    - name: argo-analyzer-volume
+      persistentVolumeClaim:
+        claimName: argo-analyzer-data
+  templates:
+    - name: train-model
+      container:
+        image: eliteabhi/analyzer:argo-training
+        command: ["python"]
+        args: ["src/main.py"]
+        env:
+
+          # Configuration
+          - name: DATASETS_PATH
+            value: "/mnt/data/combined_dataset" #! MUST BE DEFINED
+          - name: SAVE_MODEL_PATH
+            value: "/mnt/data/saved_models/BinaryAlexNet/model.pt" #? If None, sets to {CWD}/saved_models/<model_class_name>/model_<timestamp>.pt
+
+          # Dataset Hyperparameters
+          - name: DATASET_BATCH_SIZE
+            value: "32"
+          - name: DATASET_SHUFFLE
+            value: "1"
+          - name: DATASET_NUM_WORKERS
+            value: "4"
+          - name: DATASET_PIN_MEMORY
+            value: "1"
+
+          # Training Hyperparameters
+          - name: NUM_EPOCHS
+            value: "10"
+          - name: LEARNING_RATE
+            value: "0.001"
+
+        volumeMounts:
+          - name: argo-analyzer-volume
+            mountPath: /mnt/data/
+        resources:
+          requests:
+            cpu: "0.1"
+          limits:
+            cpu: "2"
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"

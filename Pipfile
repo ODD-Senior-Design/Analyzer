@@ -12,6 +12,7 @@ flask = "*"
 torchvision = "*"
 scikit-learn = "*"
 pandas = "*"
+cleanvision = "*"
 
 [dev-packages]
 

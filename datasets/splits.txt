@@ -1,0 +1,11 @@
+Train = 80%
+    - Gingivitis = 1637 Images
+    - Healthy = 846 Images
+
+Test = 10%
+    - Gingivitis = 206 Images
+    - Healthy = 107 Images
+
+Valid = 10%
+    - Gingivitis = 204 Images
+    - Healthy = 105 Images

@@ -12,21 +12,27 @@ from torch.optim import Adam
 from torch.nn import CrossEntropyLoss
 
 from model import CNN
-from data_handler import DataUnpacker, Preproccessor, unpack
+from data_handler import Preproccessor, unpack, get_combined_dataset_dataloader
 
 dry_run_datasets: bool = getenv( 'DRY_RUN_DATASETS' ) == 1
 
 datetime_format: str = getenv( "DATETIME_FORMAT" ) or '%Y-%m-%dT%H:%M:%S'
 
 datasets_path: str = getenv( "DATASETS_PATH" ) or './datasets'
+surpress_dataset_warnings: bool = getenv( "DATASET_SURPRESS_WARNINGS", "0" ) == '1'
 roboflow_api_key: Optional[ str ] = getenv( "ROBOFLOW_API_KEY" )
-compiled_model_path: str = getenv( "COMPILED_MODEL_PATH" ) or './saved_models/model/model.pt'
+saved_model_path: str = getenv( "saved_MODEL_PATH", "" )
+
+batch_size: int = int( getenv( "DATASET_BATCH_SIZE" ) or 32 )
+shuffle: bool = getenv( "DATASET_SHUFFLE", "1" ) == '1'
+num_workers: int = int( getenv( "DATASET_NUM_WORKERS" ) or 4 )
+pin_memory: bool = getenv( "DATASET_PIN_MEMORY", "1" ) == '1'
 
 evaluate: bool = getenv( "EVALUATE" ) == '1'
 evaluation_metrics_path: str = getenv( "EVALUATION_METRICS_PATH" ) or './model/model_evaluation_metrics.json'
 
 train: bool = getenv( "TRAIN" ) == '1'
-training_learning_rate: float = float( getenv( "TRAINING_LEARNING_RATE" ) or '0.001' )
+training_learning_rate: float = float( getenv( "TRAINING_LEARNING_RATE" ) or 0.001 )
 training_epocs: int = int( getenv( "TRAINING_EPOCHS" ) or '10' )
 
 webhook: Flask = Flask( getenv( "WEBHOOK_NAME" ) or 'Analyzer webhook' )
@@ -54,43 +60,42 @@ def analyze_image( image_path: str ) -> bool:
     image_tensor = image_tensor.unsqueeze( 0 )
     return model.test_image( image_tensor )
 
-def validate_combined_dataset() -> None:
-    if path.exists( f'{ datasets_path }/combined_datasets' ):
+def validate_combined_dataset( surpress_warnings ) -> None:
+    if path.exists( f'{ datasets_path }/combined_dataset' ):
         return
 
-    warn( f'Combined dataset not present at path: "{ datasets_path }/combined_datasets"', UserWarning )
-    warn( 'Please set "datasets_path" environment variable to point to the directory where the "combined_datasets" directory', UserWarning )
+    warn( f'Combined dataset not present at path: "{ datasets_path }/combined_dataset"', UserWarning )
+    warn( 'Please set "datasets_path" environment variable to point to the directory where the "combined_dataset" directory', UserWarning )
 
-    if input( 'Otherwise, auto unpack datasets to set directory? [y/N] ' ).lower() != 'y':
+    if not surpress_warnings and input( 'Otherwise, auto unpack datasets to set directory? [y/N] ' ).lower() != 'y':
         exit( 0 )
 
     unpack( datasets_path, roboflow_api_key, dry_run_datasets )
 
 def start_training() -> None:
     print( 'Validating Combined Dataset...' )
-    validate_combined_dataset()
+    validate_combined_dataset( surpress_warnings=surpress_dataset_warnings )
 
     print( 'Loading and preprocessing dataset...' )
-    dataset_unpacker = DataUnpacker( datasets_save_path=datasets_path, roboflow_api_key=roboflow_api_key )
-    combined_dataset_dataloader = dataset_unpacker.get_combined_dataset_dataloader( f'{ datasets_path }/combined_datasets' )
+    combined_dataset_dataloader = get_combined_dataset_dataloader( f'{ datasets_path }/combined_dataset/train', preprocess = True, batch_size=batch_size, shuffle = shuffle, num_workers = num_workers, pin_memory = pin_memory )
 
     print( 'Training Model...' )
     model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate ), loss_fn=CrossEntropyLoss(), num_epochs=10 )
 
     print( 'Training Model Completed!' )
-    model.save_model( compiled_model_path )
-    print( 'Model state dict saved to:', compiled_model_path )
+    model.save_model( saved_model_path )
+    print( 'Model state dict saved to:', saved_model_path )
 
 # TODO: Implement function to evaluate the model and save metrics to the evaluation_metrics_path
 def start_evaluation() -> None:
     print( 'Loading Model...' )
-    model.load_model( compiled_model_path )
+    model.load_model( saved_model_path )
 
     # TODO: Implement evaluation loop and save metrics periodically
 
 def start_analyzer() -> None:
     print( 'Loading Model...' )
-    model.load_model( compiled_model_path )
+    model.load_model( saved_model_path )
 
     print( 'Starting Webhook...' )
     webhook.run( host=bind_address, port=bind_port, debug=debug )

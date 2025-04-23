@@ -1,57 +1,15 @@
 [
 
+    
+
     {
-            
+
         "provider": "roboflow",
-        "workspace_id": "utkarsh-srivastava-o1ucd",
-        "project_id": "oral-disease-detection-1foqb",
+        "workspace_id": "oddseniordesign",
+        "project_id": "combined_dataset-h7lat",
         "version": 1,
-        "filter_labels": [ "Gingivitis" ]
-
-    },
-    {
-
-        "provider": "roboflow",
-        "workspace_id": "vishal-lqlqm",
-        "project_id": "oa-thu6d",
-        "version": 2,
-        "filter_labels": [ "Gingivitis" ]
-
-    },
-    {
-
-        "provider": "roboflow",
-        "workspace_id": "btpdata",
-        "project_id": "dental-diseases-br8zo",
-        "version": 1,
-        "filter_labels": [ "Gingivitis" ]
-
-    },
-    {
-
-        "provider": "roboflow",
-        "workspace_id": "1sep208panisara-triamrangsee",
-        "project_id": "gingivitis-lz44o",
-        "version": 2,
-        "filter_labels": [ "Healthy" ]
-
-    },
-    {
-
-        "provider": "roboflow",
-        "workspace_id": "1sep208panisara-triamrangsee",
-        "project_id": "gingivitis-sllxc",
-        "version": 2,
-        "filter_labels": [ "Healthy" ]
-
-    },
-    {
-
-        "provider": "roboflow",
-        "workspace_id": "1sep208panisara-triamrangsee",
-        "project_id": "oralc-ovpss",
-        "version": 1,
-        "filter_labels": [ "Healthy" ]
+        "format": "folder",
+        "overwrite": 0
 
     }
 

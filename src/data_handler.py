@@ -7,32 +7,14 @@ import torch
 
 from glob import glob
 from PIL import Image
-import numpy as np
 import pandas as pd
 
 from concurrent.futures import ThreadPoolExecutor
-from os import getenv, mkdir, path, listdir, remove
+from os import getenv, mkdir, path, listdir, remove, rename, walk
 from shutil import copy as copy_file, rmtree
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Tuple, Optional, Any
 import json
 import yaml
-
-# TODO: Implement class to preprocess datasets for training, validation, etc.
-class Preproccessor():
-
-    def __init__( self ) -> None:
-        self.__process_flow = transforms.Compose([
-            transforms.Resize( 256 ),
-            transforms.CenterCrop( 224 ),
-            transforms.ToTensor(),
-            transforms.Normalize( mean=[ 0.485, 0.456, 0.406 ], std=[ 0.229, 0.224, 0.225 ] )
-        ])
-
-    def process( self, dataset: Any ) -> torch.Tensor:
-        return self.__process_flow( dataset )
-
-    def get_transform( self ) -> transforms.Compose:
-        return self.__process_flow
 
 class DataUnpacker():
 
@@ -169,7 +151,7 @@ class DataUnpacker():
                 warn( result, UserWarning )
 
 
-    def unpack_datasets( self, overwrite: bool = True, clean: bool =  True, clean_max_workers: int = 8 ) -> List[ str ]:
+    def unpack_datasets( self, overwrite_dataset: bool = True, clean: bool =  True, clean_max_workers: int = 8 ) -> List[ str ]:
         manifest = self.__deserialize_dataset_manifest()
 
         dataset_paths = []
@@ -199,11 +181,25 @@ class DataUnpacker():
 
                     dataset_path = f'{ path.abspath( self.__datasets_save_path ) }/{ project_id }-{ version }'
                     dataset_format: Optional[ str ] = dataset_metadata.get( 'format' )
-                    dataset.download( location = dataset_path, model_format=dataset_format, overwrite=dataset_metadata.get( 'overwrite', overwrite ) == 1 and overwrite )
+                    overwrite_dataset = ( dataset_metadata.get( 'overwrite', overwrite_dataset ) == 1 and overwrite_dataset )
+                    dataset.download( location = dataset_path, model_format=dataset_format, overwrite=overwrite_dataset )
 
-                    if filter_labels:
+                    if ( dataset_metadata.get( 'overwrite', overwrite_dataset ) == 1 and overwrite_dataset ) and filter_labels:
                         self.__filter( dataset_path, filter_labels, filter_in_place, dataset_format or 'folder' )
                         print( 'Filtered Dataset\n' )
+
+                    if "combined_dataset" in project_id:
+                        print( "Unpacked 'combined_dataset', renaming..." )
+                        new_path = f'{ path.abspath( self.__datasets_save_path ) }/combined_dataset'
+                        if overwrite_dataset and path.exists( new_path ):
+                            warn( "Overwrite enabled and found existing 'combined_dataset', contents will be overwritten", UserWarning )
+                            rmtree( new_path )
+                        elif path.exists( new_path ):
+                            warn( "Skipping rename, 'combned_dataset' directory exists", UserWarning )
+                        else:
+                            rename( dataset_path, new_path )
+
+                        dataset_path = new_path
 
                     dataset_paths.append( dataset_path )
 
@@ -226,38 +222,78 @@ class DataUnpacker():
 
         return dataset_paths
 
-    class CombinedDataset( torch.utils.data.Dataset ):
-        def __init__( self, combined_dataset_path: str , transform: Any = None) -> None:
-            self.data_dir = combined_dataset_path
-            self.images = listdir( self.data_dir )
-            self.transform = transform
+# TODO: Implement class to preprocess datasets for training, validation, etc.
+class Preproccessor():
 
-        def __len__( self ) -> int:
-            return len( self.images )
+    def __init__( self ) -> None:
+        self.__process_flow = transforms.Compose([
+            transforms.Resize( 256 ),
+            transforms.CenterCrop( 224 ),
+            transforms.ToTensor(),
+            transforms.Normalize( mean=[ 0.485, 0.456, 0.406 ], std=[ 0.229, 0.224, 0.225 ] )
+        ])
 
-        def __getitem__( self, index ) -> np.ndarray:
-            image_path = path.join( self.data_dir, self.images[ index ] )
-            image = np.array( Image.open( image_path ) )
+    def process( self, dataset: Any ) -> torch.Tensor:
+        return self.__process_flow( dataset )
 
-            if self.transform:
-                image = self.transform( image )
+    def get_transform( self ) -> transforms.Compose:
+        return self.__process_flow
 
-            return image
+class CombinedDataset( torch.utils.data.Dataset ):
 
-    def get_combined_dataset_dataloader( self, combined_dataset_path: str, preprocess=True, batch_size: int = 32, shuffle: bool = True, num_workers: int = 2 ) -> DataLoader:
-        transform = Preproccessor().get_transform() if preprocess else None
-        combined_dataset = self.CombinedDataset( combined_dataset_path, transform )
-        return DataLoader( dataset=combined_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers )
+    def __init__( self, combined_dataset_path: str, transform: Any = None ) -> None:
+        self.data_dir = combined_dataset_path
+        self.transform = transform
 
-def unpack( datasets_path: str, roboflow_api_key: Optional[ str ] = None, overwrite: bool = True, clean: bool = True, clean_max_workers: int = 8 ) -> None:
+        self.images: List[ str ] = []
+        self.labels: List[ int ] = []
+        self.class_to_idx: Dict[ str, int ] = {}
+
+        class_index = 0
+
+        for root, _, files in walk( self.data_dir ):
+            class_name = path.basename( root )
+            if root == self.data_dir:
+                continue
+
+            if class_name not in self.class_to_idx:
+                self.class_to_idx[ class_name ] = class_index
+                class_index += 1
+
+            for file in files:
+                if file.lower().endswith( ('.jpg', '.jpeg', '.png') ):
+                    self.images.append( path.join( root, file ) )
+                    self.labels.append( self.class_to_idx[ class_name ] )
+
+    def __len__( self ) -> int:
+        return len( self.images )
+
+    def __getitem__( self, index: int ) -> Tuple[ Any, int ]:
+        image_path = self.images[ index ]
+        label = self.labels[ index ]
+
+        image = Image.open( image_path ).convert( 'RGB' )
+        if self.transform:
+            image = self.transform( image )
+
+        return image, label
+
+
+def get_combined_dataset_dataloader( combined_dataset_path: str, preprocess = True, batch_size: int = 32, shuffle: bool = True, num_workers: int = 4, pin_memory = True ) -> DataLoader:
+    transform = Preproccessor().get_transform() if preprocess else None
+    combined_dataset = CombinedDataset( combined_dataset_path, transform )
+    return DataLoader( dataset=combined_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory )
+
+def unpack( datasets_path: str, roboflow_api_key: Optional[ str ] = None, overwrite: bool = True, clean: bool = False, clean_max_workers: int = 8, no_exit = False) -> None:
     if not roboflow_api_key:
         warn( 'Environment variable "ROBOFLOW_API_KEY" is not set. Keep in mind using Roboflow as a provider is not possible then.', UserWarning )
 
     dataset_unpacker = DataUnpacker( datasets_save_path=datasets_path, roboflow_api_key=roboflow_api_key )
     dataset_unpacker.unpack_datasets( overwrite, clean, clean_max_workers )
 
-    print( 'Datasets unpacked successfully! Please manually verify and combine datasets into a "combined_datasets" directory before training' )
-    exit( 0 )
+    print( 'Datasets unpacked successfully! Please manually verify and combine datasets into a "combined_dataset" directory before training' )
+    if not no_exit:
+        exit( 0 )
 
 if __name__ == '__main__':
     load_dotenv()
