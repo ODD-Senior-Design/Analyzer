@@ -1,0 +1,162 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: analyzer-templates
+spec:
+  templates:
+
+    - name: train-model
+      container:
+        image: eliteabhi/analyzer:argo
+        imagePullPolicy: Always
+        workingDir: /app
+        command: ["python"]
+        args: ["src/main.py"]
+        env:
+
+          # Configuration
+          - name: DATASETS_PATH
+            value: "/mnt/data/"
+          - name: SAVE_MODEL_PATH
+            value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+          - name: TRAIN
+            value: "1"
+
+          # Dataset Hyperparameters
+          - name: DATASET_BATCH_SIZE
+            value: "32"
+          - name: DATASET_SHUFFLE
+            value: "1"
+          - name: DATASET_NUM_WORKERS
+            value: "4"
+          - name: DATASET_PIN_MEMORY
+            value: "1"
+
+          # Training Hyperparameters
+          - name: NUM_EPOCHS
+            value: "10"
+          - name: LEARNING_RATE
+            value: "0.001"
+
+        volumeMounts:
+          - name: argo-analyzer-volume
+            mountPath: /mnt/data/
+          - name: shm-volume
+            mountPath: /dev/shm
+
+        securityContext:
+          privileged: true
+
+        nodeSelector:
+          kubernetes.io/hostname: main-server
+
+        resources:
+          requests:
+            cpu: "0.1"
+          limits:
+            cpu: "2"
+
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+    - name: validate-model
+      container:
+        image: eliteabhi/analyzer:argo
+        imagePullPolicy: Always
+        workingDir: /app
+        command: ["python"]
+        args: ["src/main.py"]
+        env:
+
+          # Configuration
+          - name: DATASETS_PATH
+            value: "/mnt/data/"
+          - name: COMPILED_MODEL_PATH
+            value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+          - name: EVALUATE
+            value: "1"
+
+          # Dataset Hyperparameters
+          - name: DATASET_BATCH_SIZE
+            value: "32"
+          - name: DATASET_SHUFFLE
+            value: "0"
+          - name: DATASET_NUM_WORKERS
+            value: "4"
+          - name: DATASET_PIN_MEMORY
+            value: "1"
+
+        volumeMounts:
+          - name: argo-analyzer-volume
+            mountPath: /mnt/data/
+          - name: shm-volume
+            mountPath: /dev/shm
+
+        securityContext:
+          privileged: true
+
+        nodeSelector:
+          kubernetes.io/hostname: main-server
+
+        resources:
+          requests:
+            cpu: "0.1"
+          limits:
+            cpu: "2"
+
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+    - name: test-model
+      container:
+        image: eliteabhi/analyzer:argo
+        imagePullPolicy: Always
+        workingDir: /app
+        command: ["python"]
+        args: ["src/main.py"]
+        env:
+
+          # Configuration
+          - name: DATASETS_PATH
+            value: "/mnt/data/"
+          - name: COMPILED_MODEL_PATH
+            value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+          - name: TEST
+            value: "1"
+
+          # Dataset Hyperparameters
+          - name: DATASET_BATCH_SIZE
+            value: "32"
+          - name: DATASET_SHUFFLE
+            value: "0"
+          - name: DATASET_NUM_WORKERS
+            value: "4"
+          - name: DATASET_PIN_MEMORY
+            value: "1"
+
+        volumeMounts:
+          - name: argo-analyzer-volume
+            mountPath: /mnt/data/
+          - name: shm-volume
+            mountPath: /dev/shm
+
+        securityContext:
+          privileged: true
+
+        nodeSelector:
+          kubernetes.io/hostname: main-server
+
+        resources:
+          requests:
+            cpu: "0.1"
+          limits:
+            cpu: "2"
+
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"

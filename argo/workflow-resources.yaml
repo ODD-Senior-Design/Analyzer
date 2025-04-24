@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argo-analyzer
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: argo-analyzer-pv
+  namespace: argo-analyzer
+spec:
+  storageClassName: nfs
+  volumeMode: Filesystem
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - hard
+  nfs:
+    path: /media/k8-data/argo/analyzer
+    server: 192.168.1.25
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argo-analyzer-data
+  namespace: argo-analyzer
+spec:
+  storageClassName: nfs
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi

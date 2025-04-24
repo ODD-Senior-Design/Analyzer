@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: analyzer-run-
+spec:
+  entrypoint: pipeline
+  arguments:
+    parameters:
+      - name: train_model
+        value: "true"
+      - name: validate_model
+        value: "true"
+      - name: test_model
+        value: "false"
+
+  templates:
+    - name: pipeline
+      dag:
+        tasks:
+          - name: train
+            templateRef:
+              name: analyzer-templates
+              template: train-model
+            when: "{{workflow.parameters.train_model}} == true"
+
+          - name: validate
+            templateRef:
+              name: analyzer-templates
+              template: validate-model
+            dependencies: [train]
+            when: "{{workflow.parameters.validate_model}} == true"
+
+          - name: test
+            templateRef:
+              name: analyzer-templates
+              template: test-model
+            dependencies: [train]
+            when: "{{workflow.parameters.test_model}} == true"
