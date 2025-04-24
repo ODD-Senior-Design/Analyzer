@@ -79,12 +79,14 @@ def validate_combined_dataset( surpress_warnings ) -> None:
 
     unpack( datasets_path, roboflow_api_key, dry_run_datasets )
 
-def save_metrics( model_metrics: Tuple[ np.ndarray, np.ndarray ], raw_model_metrics: Tuple[ np.ndarray, np.ndarray ], metrics_save_dir: str,include_confusion_matrix: bool = False, testing = False ) -> Tuple[ str, Dict[ str, Any ], Optional[ str ], Optional[ pd.DataFrame ] ]:
-
+def save_metrics( model_metrics: Tuple[ np.ndarray, np.ndarray ], raw_model_metrics: Tuple[ np.ndarray, np.ndarray ], metrics_save_dir: str, include_confusion_matrix: bool = False, testing = False ) -> Tuple[ str, Dict[ str, Any ], Optional[ str ], Optional[ pd.DataFrame ] ]:
     if metrics_save_dir == './metrics' and not path.exists( metrics_save_dir ):
         makedirs( metrics_save_dir, exist_ok = True )
     elif not path.exists( metrics_save_dir ):
         raise FileNotFoundError( f'Directory { metrics_save_dir } does not exist.' )
+    
+    metrics_save_dir = f'{ metrics_save_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics'
+    makedirs( metrics_save_dir, exist_ok=True )
 
     accuracy: float = float( accuracy_score( *model_metrics ) )
     precision: float = float( precision_score( *model_metrics ) )
@@ -126,7 +128,6 @@ def save_metrics( model_metrics: Tuple[ np.ndarray, np.ndarray ], raw_model_metr
 
     return metrics_file_path, metrics, confusion_matrix_file_path, confusion_matrix_df
 
-
 def start_training() -> None:
     print( 'Validating Combined Dataset...' )
     validate_combined_dataset( surpress_warnings=surpress_dataset_warnings )
@@ -138,8 +139,11 @@ def start_training() -> None:
     model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate ), loss_fn=BCEWithLogitsLoss(), num_epochs=10 )
 
     print( '\nTraining Model Completed!' )
+
     model_path = model.save_model( saved_model_path )
     print( 'Model state dict saved to:', model_path )
+
+    model.plot_loss( save_path=f'{ model_path[ :model_path.rfind( '/' ) ] }/{ path.basename( model_path ).split( '.' )[0] }_loss_chart_{ datetime.now().strftime( datetime_format ) }.png' )
 
 def start_evaluation() -> None:
     print( 'Validating Combined Dataset...' )

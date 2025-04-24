@@ -73,13 +73,23 @@ class CNN( Module ):
     def forward( self, x: torch.Tensor ) -> torch.Tensor:
         return self.model( x )
 
-    def plot_loss( self, title: str = 'Model Loss' ) -> None:
-        plt.plot( self.__loss_values, label=title )
+    def plot_loss( self, title: str = 'Model Loss', save_path = './loss_chart.png' ) -> None:
+        plt.plot( self.__loss_values, label = title )
         plt.xlabel( 'Epochs' )
         plt.ylabel( 'Loss' )
-        plt.show()
+        plt.title( title )
+        plt.grid( True )
+        plt.legend()
 
-    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, plot_loss: bool = True, scheduler: Optional[Any] = None, accumulation_steps: int = 1, early_stop_patience: int = 5, seed: int = 42 ) -> None:
+        if sys.stdout.isatty():
+            plt.show()
+        
+        plt.savefig( save_path )
+        print( f"[INFO] Loss plot saved to: { save_path }" )
+
+        plt.close()
+
+    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, scheduler: Optional[Any] = None, accumulation_steps: int = 1, early_stop_patience: int = 5, seed: int = 42 ) -> None:
         # Reproducibility
         torch.manual_seed( seed )
         np.random.seed( seed )
@@ -146,16 +156,6 @@ class CNN( Module ):
             epoch_duration: float = time.time() - start_time
             self.__loss_values.append( epoch_loss )
             print( f"Epoch { epoch+1 } Loss: {epoch_loss:.4f} | Duration: {epoch_duration:.2f}s" )
-
-            with open( "training_log.csv", "a", encoding="utf-8" ) as f:
-                f.write( f"{ epoch+1 },{epoch_loss:.4f},{epoch_duration:.2f}\n" )
-
-            if plot_loss:
-                self.plot_loss( 'Training Loss' )
-
-            # Save model every 5 epochs
-            if ( epoch + 1 ) % 5 == 0:
-                torch.save( self.state_dict(), f"model_epoch_{ epoch+1 }.pt" )
 
             # Early stopping
             if epoch_loss > best_loss:
