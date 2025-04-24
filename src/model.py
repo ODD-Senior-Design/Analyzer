@@ -215,23 +215,31 @@ class CNN( Module ):
 
         return accuracy
 
-    def get_predictions( self, data: DataLoader ) -> Tuple[ List[ float ], List[ float ] ]:
+    def get_predictions( self, data: DataLoader, return_probs: bool = False ) -> Tuple[ np.ndarray, np.ndarray ]:
         self.to( self.__device )
         self.eval()
 
-        all_predictions: List[ float ] = []
+        all_outputs: List[ float ] = []
         all_labels: List[ float ] = []
 
         with torch.no_grad():
             for inputs, labels in data:
-                inputs, labels = inputs.to( self.__device ), labels.to( self.__device ).float()
-                outputs: torch.Tensor = self( inputs )
-                predictions: torch.Tensor = ( self.__evaluation_function( outputs ) > 0.5 ).float()
+                inputs = inputs.to( self.__device )
+                labels = labels.to( self.__device ).float().view( -1 )
 
-                all_predictions.extend( predictions.cpu().numpy() )
+                outputs: torch.Tensor = self( inputs ).squeeze()
+                probs: torch.Tensor = self.__evaluation_function( outputs )
+
+                all_outputs.extend( probs.cpu().numpy() )
                 all_labels.extend( labels.cpu().numpy() )
 
-        return all_labels, all_predictions
+        all_outputs_arr: np.ndarray = np.array( all_outputs )
+        all_labels_arr: np.ndarray = np.array( all_labels )
+
+        if return_probs:
+            return all_labels_arr, all_outputs_arr
+        predictions: np.ndarray = ( all_outputs_arr > 0.5 ).astype( float )
+        return all_labels_arr, predictions
 
     def test_image( self, image_tensor: torch.Tensor ) -> bool:
         with torch.no_grad():

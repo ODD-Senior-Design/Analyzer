@@ -98,8 +98,6 @@ spec:
             mountPath: /dev/shm
         securityContext:
           privileged: true
-        nodeSelector:
-          kubernetes.io/hostname: main-server
         resources:
           requests:
             cpu: "2"
@@ -143,8 +141,6 @@ spec:
             mountPath: /dev/shm
         securityContext:
           privileged: true
-        nodeSelector:
-          kubernetes.io/hostname: main-server
         resources:
           requests:
             cpu: "2"

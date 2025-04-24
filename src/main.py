@@ -4,7 +4,7 @@ from warnings import warn
 
 from PIL import Image
 from datetime import datetime
-from typing import Dict, Optional, Tuple, List, Any
+from typing import Dict, Optional, Tuple, Any
 
 from flask import Flask, Response, jsonify, request
 
@@ -15,7 +15,7 @@ from torch.nn import BCEWithLogitsLoss
 import numpy as np
 import pandas as pd
 import json
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score
 
 from model import CNN
 from data_handler import Preproccessor, unpack, get_combined_dataset_dataloader
@@ -79,7 +79,7 @@ def validate_combined_dataset( surpress_warnings ) -> None:
 
     unpack( datasets_path, roboflow_api_key, dry_run_datasets )
 
-def save_metrics( model_metrics: Tuple[ List[ float ], List[ float ] ], metrics_save_dir: str, include_confusion_matrix: bool = False ) -> Tuple[ str, Dict[ str, Any ], Optional[ str ], Optional [ pd.DataFrame ] ]:
+def save_metrics( model_metrics: Tuple[ np.ndarray, np.ndarray ], raw_model_metrics: Tuple[ np.ndarray, np.ndarray ], metrics_save_dir: str, include_confusion_matrix: bool = False, testing = False ) -> Tuple[ str, Dict[ str, Any ], Optional[ str ], Optional [ pd.DataFrame ] ]:
     if metrics_save_dir == './metrics' and not path.exists( metrics_save_dir ):
         makedirs( path.dirname( metrics_save_dir ), exist_ok=True )
 
@@ -90,7 +90,8 @@ def save_metrics( model_metrics: Tuple[ List[ float ], List[ float ] ], metrics_
     precision: float = float( precision_score( *model_metrics ) )
     recall: float = float( recall_score( *model_metrics ) )
     f1: float = float( f1_score( *model_metrics ) )
-    cm: np.ndarray = confusion_matrix( *model_metrics )
+    roc_auc = float( roc_auc_score( *raw_model_metrics ) )
+    cm = confusion_matrix( *model_metrics )
     timestamp: str = datetime.now().strftime( datetime_format )
 
     metrics: Dict[ str, Any ] = {
@@ -99,9 +100,10 @@ def save_metrics( model_metrics: Tuple[ List[ float ], List[ float ] ], metrics_
         'precision': precision,
         'recall': recall,
         'f1_score': f1,
-    } | ( { 'confusion_matrix': cm } if include_confusion_matrix else {} )
+        'roc_auc': roc_auc
+    }
 
-    metrics_file_path = f'{ metrics_save_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics_{ timestamp }.json'
+    metrics_file_path = f'{ metrics_save_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_{ 'testing' if testing else 'validation' }_metrics_{ timestamp }.json'
 
     confusion_matrix_file_path = f'{ metrics_save_dir }/metrics_{ timestamp }.csv' if include_confusion_matrix else None
     confusion_matrix_df = pd.DataFrame( cm, index = [ "Actual 0", "Actual 1" ], columns = [ "Predicted 0", "Predicted 1" ] ) if include_confusion_matrix else None
@@ -140,8 +142,9 @@ def start_evaluation() -> None:
     print( 'Starting evaluation...' )
     model.evaluate_model( validation_loader )
 
+    raw_model_metrics = model.get_predictions( validation_loader, return_probs=True )
     model_metrics = model.get_predictions( validation_loader )
-    evaluation_metrics_path, metrics, _, _ = save_metrics( model_metrics, metrics_path, include_confusion_matrix=False )
+    evaluation_metrics_path, metrics, _, _ = save_metrics( model_metrics, raw_model_metrics, metrics_path, include_confusion_matrix=False, testing=False )
 
     print( f'\nEvaluation metrics:\n{ metrics }\n' )
     print( f"Evaluation metrics saved to: { evaluation_metrics_path }" )
@@ -165,14 +168,14 @@ def start_testing() -> None:
     print( 'Starting testing...' )
     model.evaluate_model( testing_loader )
 
+    raw_model_metrics = model.get_predictions( testing_loader, return_probs=True )
     model_metrics = model.get_predictions( testing_loader )
-    test_metrics_path, metrics, confusion_matrix_path, confusion_matrix_df = save_metrics( model_metrics, metrics_path, include_confusion_matrix=False )
+    test_metrics_path, metrics, confusion_matrix_path, confusion_matrix_df = save_metrics( model_metrics, raw_model_metrics, metrics_path, include_confusion_matrix=True, testing=True )
 
     print( f'\nTest metrics:\n{ metrics }\n' )
     print( f"Test metrics saved to: { test_metrics_path }" )
     print( f"Confusion Matrix:\n{ confusion_matrix_df }" )
     print( f"Confusion matrix saved to: { confusion_matrix_path }" )
-
 
 def start_analyzer() -> None:
     print( 'Loading Model...' )
