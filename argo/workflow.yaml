@@ -14,9 +14,27 @@ spec:
         value: "true"
       - name: test_model
         value: "true"
-
       - name: model_path
         value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+
+      - name: num_workers
+        value: "4"
+
+      # Hyperparameters
+      - name: batch_size
+        value: "32"
+      - name: shuffle
+        value: "1"
+      - name: model_dropout
+        value: "0.5"
+      - name: training_weight_decay
+        value: "0.0"
+      - name: training_learning_rate
+        value: "0.001"
+      - name: training_epochs
+        value: "10"
+      - name: evaluation_threshold
+        value: "0.5"
 
   volumes:
     - name: argo-analyzer-training-volume
@@ -56,6 +74,20 @@ spec:
               parameters:
                 - name: model_path
                   value: "{{workflow.parameters.model_path}}"
+                - name: batch_size
+                  value: "{{workflow.parameters.batch_size}}"
+                - name: shuffle
+                  value: "{{workflow.parameters.shuffle}}"
+                - name: num_workers
+                  value: "{{workflow.parameters.num_workers}}"
+                - name: model_dropout
+                  value: "{{workflow.parameters.model_dropout}}"
+                - name: training_weight_decay
+                  value: "{{workflow.parameters.training_weight_decay}}"
+                - name: training_learning_rate
+                  value: "{{workflow.parameters.training_learning_rate}}"
+                - name: training_epochs
+                  value: "{{workflow.parameters.training_epochs}}"
             dependencies: [ check-model-exists ]
             when: "{{tasks.check-model-exists.outputs.parameters.should_train}} == true"
 
@@ -68,6 +100,8 @@ spec:
               parameters:
                 - name: model_path
                   value: "{{workflow.parameters.model_path}}"
+                - name: evaluation_threshold
+                  value: "{{workflow.parameters.evaluation_threshold}}"
             dependencies: [ train ]
             when: "{{workflow.parameters.validate_model}} == true"
 
@@ -80,6 +114,8 @@ spec:
               parameters:
                 - name: model_path
                   value: "{{workflow.parameters.model_path}}"
+                - name: evaluation_threshold
+                  value: "{{workflow.parameters.evaluation_threshold}}"
             dependencies: [ train ]
             when: "{{workflow.parameters.test_model}} == true"
 

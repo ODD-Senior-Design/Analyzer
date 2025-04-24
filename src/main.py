@@ -32,21 +32,24 @@ saved_model_path: str = getenv( "SAVED_MODEL_PATH", "" )
 batch_size: int = int( getenv( "DATASET_BATCH_SIZE" ) or 32 )
 shuffle: bool = getenv( "DATASET_SHUFFLE", "1" ) == '1'
 num_workers: int = int( getenv( "DATASET_NUM_WORKERS" ) or 4 )
+model_dropout: float = float( getenv( "MODEL_DROPOUT" ) or 0.5 )
+training_weight_decay: float = float( getenv( "TRAINING_WEIGHT_DECAY" ) or 0 )
+training_learning_rate: float = float( getenv( "TRAINING_LEARNING_RATE" ) or 0.001 )
+training_epocs: int = int( getenv( "TRAINING_EPOCHS" ) or 10 )
+evaluation_threshold: float = float( getenv( "EVALUATION_THRESHOLD" ) or 0.5 )
 
 evaluate: bool = getenv( "EVALUATE" ) == '1'
 
 test: bool = getenv( "TEST" ) == '1'
 
 train: bool = getenv( "TRAIN" ) == '1'
-training_learning_rate: float = float( getenv( "TRAINING_LEARNING_RATE" ) or 0.001 )
-training_epocs: int = int( getenv( "TRAINING_EPOCHS" ) or '10' )
 
 webhook: Flask = Flask( getenv( "WEBHOOK_NAME" ) or 'Analyzer webhook' )
 debug: bool = getenv( "DEBUG" ) == '1'
 bind_address: str = getenv( "BIND_ADDRESS" ) or '0.0.0.0'
 bind_port: int = int( getenv( "BIND_PORT" ) or 9000 )
 
-model = CNN( device=torch.device( 'cuda' if torch.cuda.is_available() else 'cpu' ) )
+model = CNN( model_kwargs={ 'dropout': model_dropout }, device=torch.device( 'cuda' if torch.cuda.is_available() else 'cpu' ),  )
 
 @webhook.route( "/analyze", methods=[ "POST" ] )
 def analyze_image_webhook() -> Response:
@@ -135,7 +138,7 @@ def start_training() -> None:
     combined_dataset_dataloader = get_combined_dataset_dataloader( f'{ datasets_path }/combined_dataset/train', preprocess = True, batch_size=batch_size, shuffle = shuffle, num_workers = num_workers )
 
     print( 'Training Model...' )
-    model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate ), loss_fn=BCEWithLogitsLoss(), num_epochs=10 )
+    model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate, weight_decay=training_weight_decay ), loss_fn=BCEWithLogitsLoss(), num_epochs=10 )
 
     print( '\nTraining Model Completed!' )
 
@@ -155,7 +158,7 @@ def start_evaluation() -> None:
     model.load_model( saved_model_path )
 
     print( 'Starting evaluation...' )
-    model.evaluate_model( validation_loader )
+    model.evaluate_model( validation_loader, evaluation_threshold )
 
     metrics_path = saved_model_path[ :saved_model_path.rfind( '/' ) ]
     raw_model_metrics = model.get_predictions( validation_loader, return_probs=True )
@@ -183,7 +186,7 @@ def start_testing() -> None:
     model.load_model( saved_model_path )
 
     print( 'Starting testing...' )
-    model.evaluate_model( testing_loader )
+    model.evaluate_model( testing_loader, evaluation_threshold )
 
     metrics_path = saved_model_path[ :saved_model_path.rfind( '/' ) ]
     raw_model_metrics = model.get_predictions( testing_loader, return_probs=True )

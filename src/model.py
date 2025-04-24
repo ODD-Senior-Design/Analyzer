@@ -23,6 +23,7 @@ class CNN( Module ):
         self.__loss_values: List[ float ] = []
         self.__evaluation_function = evaluation_function
         self.__device = device
+        self._is_compiled = False
 
         if model_class is None:
             model_class = self.BinaryAlexNet
@@ -167,7 +168,7 @@ class CNN( Module ):
                 best_loss = epoch_loss
                 patience_counter = 0
 
-    def evaluate_model( self, data: DataLoader ) -> float:
+    def evaluate_model( self, data: DataLoader, threshold = 0.5 ) -> float:
         if hasattr( self, "compile" ) and not getattr( self, "_is_compiled", False ):
             self.compile()
             self._is_compiled = True
@@ -192,7 +193,7 @@ class CNN( Module ):
                 labels = labels.to( self.__device, non_blocking=True ).float().view(-1)
 
                 outputs: torch.Tensor = self( inputs ).squeeze()
-                predictions: torch.Tensor = ( self.__evaluation_function( outputs ) > 0.5 ).float()
+                predictions: torch.Tensor = ( self.__evaluation_function( outputs ) > threshold ).float()
 
                 all_predictions.extend( predictions.cpu().numpy() )
                 all_labels.extend( labels.cpu().numpy() )

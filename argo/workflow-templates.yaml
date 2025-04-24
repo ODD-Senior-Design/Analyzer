@@ -24,6 +24,13 @@ spec:
       inputs:
         parameters:
           - name: model_path
+          - name: batch_size
+          - name: shuffle
+          - name: num_workers
+          - name: model_dropout
+          - name: training_weight_decay
+          - name: training_learning_rate
+          - name: training_epochs
       container:
         image: eliteabhi/analyzer:argo
         imagePullPolicy: Always
@@ -38,17 +45,19 @@ spec:
           - name: TRAIN
             value: "1"
           - name: DATASET_BATCH_SIZE
-            value: "32"
+            value: "{{inputs.parameters.batch_size}}"
           - name: DATASET_SHUFFLE
-            value: "1"
+            value: "{{inputs.parameters.shuffle}}"
           - name: DATASET_NUM_WORKERS
-            value: "4"
-          - name: DATASET_PIN_MEMORY
-            value: "1"
+            value: "{{inputs.parameters.num_workers}}"
           - name: NUM_EPOCHS
-            value: "10"
+            value: "{{inputs.parameters.training_epochs}}"
           - name: LEARNING_RATE
-            value: "0.001"
+            value: "{{inputs.parameters.training_learning_rate}}"
+          - name: MODEL_DROPOUT
+            value: "{{inputs.parameters.model_dropout}}"
+          - name: WEIGHT_DECAY
+            value: "{{inputs.parameters.training_weight_decay}}"
         volumeMounts:
           - name: argo-analyzer-training-volume
             mountPath: /mnt/data/
@@ -72,6 +81,7 @@ spec:
       inputs:
         parameters:
           - name: model_path
+          - name: evaluation_threshold
       container:
         image: eliteabhi/analyzer:argo
         imagePullPolicy: Always
@@ -87,14 +97,8 @@ spec:
             value: "0"
           - name: EVALUATE
             value: "1"
-          - name: DATASET_BATCH_SIZE
-            value: "32"
-          - name: DATASET_SHUFFLE
-            value: "0"
-          - name: DATASET_NUM_WORKERS
-            value: "4"
-          - name: DATASET_PIN_MEMORY
-            value: "1"
+          - name: EVALUATION_THRESHOLD
+            value: "{{inputs.parameters.evaluation_threshold}}"
         volumeMounts:
           - name: argo-analyzer-validation-volume
             mountPath: /mnt/data/
@@ -116,6 +120,7 @@ spec:
       inputs:
         parameters:
           - name: model_path
+          - name: evaluation_threshold
       container:
         image: eliteabhi/analyzer:argo
         imagePullPolicy: Always
@@ -131,14 +136,8 @@ spec:
             value: "0"
           - name: TEST
             value: "1"
-          - name: DATASET_BATCH_SIZE
-            value: "32"
-          - name: DATASET_SHUFFLE
-            value: "0"
-          - name: DATASET_NUM_WORKERS
-            value: "4"
-          - name: DATASET_PIN_MEMORY
-            value: "1"
+          - name: EVALUATION_THRESHOLD
+            value: "{{inputs.parameters.evaluation_threshold}}"
         volumeMounts:
           - name: argo-analyzer-testing-volume
             mountPath: /mnt/data/
