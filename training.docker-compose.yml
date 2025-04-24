@@ -1,0 +1,27 @@
+
+services:
+  trainer:
+    image: eliteabhi/analyzer:argo-training
+    container_name: analyzer-trainer
+    environment:
+      DATASETS_PATH: "./datasets/combined_dataset"
+      SAVE_MODEL_PATH: "./saved_models/BinaryAlexNet/model.pt"
+      DATASET_BATCH_SIZE: "32"
+      DATASET_SHUFFLE: "1"
+      DATASET_NUM_WORKERS: "4"
+      DATASET_PIN_MEMORY: "1"
+      NUM_EPOCHS: "10"
+      LEARNING_RATE: "0.001"
+    volumes:
+      - ./datasets:./datasets/combined_dataset:ro
+      - ./saved_models:./saved_models
+      - /dev/shm:/dev/shm           # Use host shared memory
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]   # Automatically requests a GPU
+    shm_size: '4gb'                 # Optional: override shared memory size
+    stdin_open: true
+    tty: true
+    restart: "no"
