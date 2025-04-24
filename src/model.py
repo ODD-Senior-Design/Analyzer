@@ -35,7 +35,7 @@ class CNN( Module ):
     class BinaryAlexNet( Module ):
         #* From https://github.com/pytorch/vision/blob/main/torchvision/models/alexnet.py
         #* Modified to be for binary classification
-        def __init__( self, dropout: float = 0.5, num_classes = 2 ) -> None:
+        def __init__( self, dropout: float = 0.5, num_classes = 1 ) -> None:
             super().__init__()
             self.__features = Sequential(
                 Conv2d( 3, 64, kernel_size=11, stride=4, padding=2 ),
@@ -80,7 +80,6 @@ class CNN( Module ):
         plt.show()
 
     def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, plot_loss: bool = True, scheduler: Optional[Any] = None, accumulation_steps: int = 1, early_stop_patience: int = 5, seed: int = 42 ) -> None:
-
         # Reproducibility
         torch.manual_seed( seed )
         np.random.seed( seed )
@@ -113,7 +112,8 @@ class CNN( Module ):
                                 disable=False )
 
             for step, (inputs, labels) in enumerate( dataloader ):
-                inputs, labels = inputs.to( self.__device, non_blocking=True ), labels.to( self.__device, non_blocking=True )
+                inputs = inputs.to( self.__device, non_blocking=True )
+                labels = labels.to( self.__device, non_blocking=True ).float().unsqueeze( 1 )
                 optimizer.zero_grad()
 
                 with amp_context:
@@ -168,8 +168,9 @@ class CNN( Module ):
                 patience_counter = 0
 
     def evaluate_model( self, data: DataLoader ) -> float:
-        if hasattr( self, "compile" ):
+        if hasattr( self, "compile" ) and not getattr( self, "_is_compiled", False ):
             self.compile()
+            self._is_compiled = True
 
         self.to( self.__device )
         self.eval()
@@ -186,17 +187,32 @@ class CNN( Module ):
                         disable = False )
 
         with torch.no_grad():
-            for inputs, labels in dataloader:
-                inputs, labels = inputs.to( self.__device ), labels.to( self.__device ).float()
-                outputs: torch.Tensor = self( inputs )
+            for batch_idx, (inputs, labels) in enumerate( dataloader ):
+                inputs = inputs.to( self.__device, non_blocking=True )
+                labels = labels.to( self.__device, non_blocking=True ).float().view(-1)
+
+                outputs: torch.Tensor = self( inputs ).squeeze()
                 predictions: torch.Tensor = ( self.__evaluation_function( outputs ) > 0.5 ).float()
 
                 all_predictions.extend( predictions.cpu().numpy() )
                 all_labels.extend( labels.cpu().numpy() )
 
+                batch_acc = ( predictions == labels ).float().mean().item()
+
+                if is_interactive:
+                    dataloader.set_postfix( accuracy=batch_acc )
+                else:
+                    print( f"[Eval] Batch {batch_idx + 1} Accuracy: {batch_acc:.4f}", flush=True )
+
         end_time: float = time.time()
         accuracy: float = float( accuracy_score( all_labels, all_predictions ) )
-        print( f"Evaluation completed in {end_time - start_time:.2f}s - Accuracy: {accuracy:.4f}" )
+        duration: float = end_time - start_time
+
+        print( f"Evaluation completed in {duration:.2f}s - Accuracy: {accuracy:.4f}", flush=True )
+
+        with open( "evaluation_log.csv", "a", encoding="utf-8" ) as f:
+            f.write( f"{duration:.2f},{accuracy:.4f}\n" )
+
         return accuracy
 
     def get_predictions( self, data: DataLoader ) -> Tuple[ List[ float ], List[ float ] ]:

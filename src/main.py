@@ -11,7 +11,7 @@ from flask import Flask, Response, jsonify, request
 import json
 import torch
 from torch.optim import Adam
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss
 
 from sklearn.metrics import precision_score, recall_score, f1_score
 
@@ -83,7 +83,7 @@ def start_training() -> None:
     combined_dataset_dataloader = get_combined_dataset_dataloader( f'{ datasets_path }/combined_dataset/train', preprocess = True, batch_size=batch_size, shuffle = shuffle, num_workers = num_workers )
 
     print( 'Training Model...' )
-    model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate ), loss_fn=CrossEntropyLoss(), num_epochs=10 )
+    model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate ), loss_fn=BCEWithLogitsLoss(), num_epochs=10 )
 
     print( 'Training Model Completed!' )
     model.save_model( saved_model_path )
