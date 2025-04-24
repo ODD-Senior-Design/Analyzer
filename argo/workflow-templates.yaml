@@ -100,9 +100,9 @@ spec:
           privileged: true
         resources:
           requests:
-            cpu: "2"
+            cpu: "500m"
           limits:
-            cpu: "4"
+            cpu: "2"
       tolerations:
         - key: "node-role.kubernetes.io/control-plane"
           operator: "Exists"
@@ -143,9 +143,9 @@ spec:
           privileged: true
         resources:
           requests:
-            cpu: "2"
+            cpu: "500m"
           limits:
-            cpu: "4"
+            cpu: "2"
       tolerations:
         - key: "node-role.kubernetes.io/control-plane"
           operator: "Exists"
