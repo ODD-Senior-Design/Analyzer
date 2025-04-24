@@ -6,7 +6,45 @@ metadata:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: argo-analyzer-pv
+  name: argo-analyzer-training-pv
+  namespace: argo-analyzer
+spec:
+  storageClassName: nfs
+  volumeMode: Filesystem
+  capacity:
+    storage: 15Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - hard
+  nfs:
+    path: /media/k8-data/argo/analyzer
+    server: 192.168.1.25
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: argo-analyzer-validation-pv
+  namespace: argo-analyzer
+spec:
+  storageClassName: nfs
+  volumeMode: Filesystem
+  capacity:
+    storage: 15Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - hard
+  nfs:
+    path: /media/k8-data/argo/analyzer
+    server: 192.168.1.25
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: argo-analyzer-test-pv
   namespace: argo-analyzer
 spec:
   storageClassName: nfs
@@ -34,6 +72,7 @@ spec:
   resources:
     requests:
       storage: 5Gi
+  volumeName: argo-analyzer-training-pv
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -47,6 +86,7 @@ spec:
   resources:
     requests:
       storage: 5Gi
+  volumeName: argo-analyzer-validation-pv
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -60,3 +100,23 @@ spec:
   resources:
     requests:
       storage: 5Gi
+  volumeName: argo-analyzer-test-pv
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo
+  namespace: argo-analyzer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-analyzer-argo-binding
+subjects:
+  - kind: ServiceAccount
+    name: argo
+    namespace: argo-analyzer
+roleRef:
+  kind: ClusterRole
+  name: argo-cluster-role
+  apiGroup: rbac.authorization.k8s.io

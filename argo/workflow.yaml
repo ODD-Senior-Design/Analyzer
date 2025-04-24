@@ -5,10 +5,11 @@ metadata:
   namespace: argo-analyzer
 spec:
   entrypoint: pipeline
+  serviceAccountName: argo
   arguments:
     parameters:
-      - name: train_model
-        value: "true"
+      - name: force_training
+        value: "false"
       - name: validate_model
         value: "true"
       - name: test_model
@@ -29,15 +30,25 @@ spec:
         medium: Memory
 
   templates:
+
     - name: pipeline
       dag:
         tasks:
+
+          - name: check-model-exists
+            template: check-model
+            arguments:
+              parameters:
+                - name: force_training
+                  value: "{{workflow.parameters.force_training}}"
+
           - name: train
             templateRef:
               name: analyzer-templates
               template: train-model
               namespace: argo-analyzer
-            when: "{{workflow.parameters.train_model}} == true"
+            dependencies: [ check-model-exists ]
+            when: "{{tasks.check-model-exists.outputs.parameters.should_train}} == true"
 
           - name: validate
             templateRef:
@@ -54,3 +65,32 @@ spec:
               namespace: argo-analyzer
             dependencies: [train]
             when: "{{workflow.parameters.test_model}} == true"
+
+    - name: check-model
+      inputs:
+        parameters:
+          - name: force_training
+      script:
+        image: python:3.10-slim
+        command: [python]
+        volumeMounts:
+          - name: argo-analyzer-training-volume
+            mountPath: /mnt/data
+        env:
+          - name: FORCE_TRAINING
+            value: "{{inputs.parameters.force_training}}"
+        source: |
+          import os
+
+          force_training = os.getenv("FORCE_TRAINING", "false").lower() == "true"
+          model_path = "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+          should_train = force_training or not os.path.isfile(model_path)
+
+          print("should_train =", should_train)
+          with open("/tmp/output.txt", "w") as f:
+              f.write(str(should_train).lower())
+      outputs:
+        parameters:
+          - name: should_train
+            valueFrom:
+              path: /tmp/output.txt

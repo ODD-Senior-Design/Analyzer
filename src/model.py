@@ -233,8 +233,8 @@ class CNN( Module ):
 
     def load_model( self, model_path: str ) -> None:
 
-        if not model_path.endswith( '.pth' ):
-            raise ValueError( 'Model file must be a PyTorch (.pth) file' )
+        if not ( model_path.endswith( '.pth' ) or model_path.endswith( '.pt' ) ):
+            raise ValueError( 'Model file must be a PyTorch (.pth/.pt) file' )
 
         if not os.path.exists( model_path ):
             raise FileNotFoundError( f'Model file not found at { model_path }' )

@@ -77,6 +77,8 @@ spec:
             value: "/mnt/data/"
           - name: SAVED_MODEL_PATH
             value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+          - name: TRAIN
+            value: "0"
           - name: EVALUATE
             value: "1"
           - name: DATASET_BATCH_SIZE
@@ -118,6 +120,8 @@ spec:
             value: "/mnt/data/"
           - name: SAVED_MODEL_PATH
             value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+          - name: TRAIN
+            value: "0"
           - name: TEST
             value: "1"
           - name: DATASET_BATCH_SIZE
