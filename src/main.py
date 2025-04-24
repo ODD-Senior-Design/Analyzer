@@ -4,13 +4,16 @@ from warnings import warn
 
 from PIL import Image
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 from flask import Flask, Response, jsonify, request
 
+import json
 import torch
 from torch.optim import Adam
 from torch.nn import CrossEntropyLoss
+
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 from model import CNN
 from data_handler import Preproccessor, unpack, get_combined_dataset_dataloader
@@ -86,12 +89,44 @@ def start_training() -> None:
     model.save_model( saved_model_path )
     print( 'Model state dict saved to:', saved_model_path )
 
-# TODO: Implement function to evaluate the model and save metrics to the evaluation_metrics_path
 def start_evaluation() -> None:
-    print( 'Loading Model...' )
+    print( 'Validating Combined Dataset...' )
+    validate_combined_dataset( surpress_warnings = surpress_dataset_warnings )
+
+    print( 'Loading and preprocessing dataset...' )
+    validation_loader = get_combined_dataset_dataloader( f'{ datasets_path }/combined_dataset/valid', preprocess = True, batch_size = batch_size, shuffle = shuffle, num_workers = num_workers )
+
+    print( 'Loading model...' )
     model.load_model( saved_model_path )
 
-    # TODO: Implement evaluation loop and save metrics periodically
+    print( 'Starting evaluation...' )
+    accuracy: float = model.evaluate_model( validation_loader )
+
+    all_preds, all_labels = model.get_predictions( validation_loader )
+    precision: float = float( precision_score( all_labels, all_preds ) )
+    recall: float = float( recall_score( all_labels, all_preds ) )
+    f1: float = float( f1_score( all_labels, all_preds ) )
+    timestamp: str = datetime.now().strftime( datetime_format )
+
+    metrics: Dict[ str, Any ] = {
+            'timestamp': timestamp,
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1_score': f1
+    }
+
+    with open( evaluation_metrics_path, 'w', encoding='utf-8' ) as file:
+        json.dump( metrics, file, indent = 4 )
+
+    checkpoint_path: str = evaluation_metrics_path.replace( '.json', f'_{timestamp}.json' )
+    with open( checkpoint_path, 'w', encoding='utf-8' ) as file:
+        json.dump( metrics, file, indent = 4 )
+
+    print( f"Evaluation metrics saved to: {evaluation_metrics_path}" )
+    print( f"Checkpointed metrics saved to: {checkpoint_path}" )
+
+
 
 def start_analyzer() -> None:
     print( 'Loading Model...' )

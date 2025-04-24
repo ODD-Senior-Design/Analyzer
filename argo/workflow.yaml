@@ -1,7 +1,8 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: analyzer-run-
+  name: analyzer-model-pipeline
+  namespace: argo-analyzer
 spec:
   entrypoint: pipeline
   arguments:
@@ -13,6 +14,14 @@ spec:
       - name: test_model
         value: "false"
 
+  volumes:
+    - name: argo-analyzer-volume
+      persistentVolumeClaim:
+        claimName: argo-analyzer-data
+    - name: shm-volume
+      emptyDir:
+        medium: Memory
+
   templates:
     - name: pipeline
       dag:
@@ -21,18 +30,21 @@ spec:
             templateRef:
               name: analyzer-templates
               template: train-model
+              namespace: argo-analyzer
             when: "{{workflow.parameters.train_model}} == true"
 
           - name: validate
             templateRef:
               name: analyzer-templates
               template: validate-model
-            dependencies: [train]
+              namespace: argo-analyzer
+            dependencies: [ train ]
             when: "{{workflow.parameters.validate_model}} == true"
 
           - name: test
             templateRef:
               name: analyzer-templates
               template: test-model
+              namespace: argo-analyzer
             dependencies: [train]
             when: "{{workflow.parameters.test_model}} == true"

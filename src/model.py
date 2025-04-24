@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout
 from sklearn.metrics import accuracy_score
-from typing import List, Optional, Type, Dict, Any
+from typing import List, Optional, Type, Tuple, Dict, Any
 
 class CNN( Module ):
 
@@ -107,7 +107,7 @@ class CNN( Module ):
 
             is_interactive = sys.stdout.isatty()
             dataloader = tqdm( dataset,
-                                desc=f"Epoch { epoch+1 }/{ num_epochs }",
+                                desc=f"Epoch {epoch+1}/{num_epochs}",
                                 dynamic_ncols=not is_interactive,
                                 file=sys.stdout if is_interactive else None,
                                 disable=False )
@@ -145,10 +145,10 @@ class CNN( Module ):
             epoch_loss: float = running_loss / len( dataset )
             epoch_duration: float = time.time() - start_time
             self.__loss_values.append( epoch_loss )
-            print( f"Epoch { epoch+1 } Loss: { epoch_loss:.4f } | Duration: {epoch_duration:.2f}s" )
+            print( f"Epoch { epoch+1 } Loss: {epoch_loss:.4f} | Duration: {epoch_duration:.2f}s" )
 
             with open( "training_log.csv", "a", encoding="utf-8" ) as f:
-                f.write( f"{ epoch+1 },{epoch_loss:.4f},{ epoch_duration:.2f}\n" )
+                f.write( f"{ epoch+1 },{epoch_loss:.4f},{epoch_duration:.2f}\n" )
 
             if plot_loss:
                 self.plot_loss( 'Training Loss' )
@@ -177,22 +177,50 @@ class CNN( Module ):
         all_predictions: List[ float ] = []
         all_labels: List[ float ] = []
 
+        start_time: float = time.time()
+        is_interactive = sys.stdout.isatty()
+        dataloader = tqdm( data,
+                        desc = "Evaluating Model",
+                        dynamic_ncols = not is_interactive,
+                        file = sys.stdout if is_interactive else None,
+                        disable = False )
+
+        with torch.no_grad():
+            for inputs, labels in dataloader:
+                inputs, labels = inputs.to( self.__device ), labels.to( self.__device ).float()
+                outputs: torch.Tensor = self( inputs )
+                predictions: torch.Tensor = ( self.__evaluation_function( outputs ) > 0.5 ).float()
+
+                all_predictions.extend( predictions.cpu().numpy() )
+                all_labels.extend( labels.cpu().numpy() )
+
+        end_time: float = time.time()
+        accuracy: float = float( accuracy_score( all_labels, all_predictions ) )
+        print( f"Evaluation completed in {end_time - start_time:.2f}s - Accuracy: {accuracy:.4f}" )
+        return accuracy
+
+    def get_predictions( self, data: DataLoader ) -> Tuple[ List[ float ], List[ float ] ]:
+        self.to( self.__device )
+        self.eval()
+
+        all_predictions: List[ float ] = []
+        all_labels: List[ float ] = []
+
         with torch.no_grad():
             for inputs, labels in data:
                 inputs, labels = inputs.to( self.__device ), labels.to( self.__device ).float()
                 outputs: torch.Tensor = self( inputs )
                 predictions: torch.Tensor = ( self.__evaluation_function( outputs ) > 0.5 ).float()
+
                 all_predictions.extend( predictions.cpu().numpy() )
                 all_labels.extend( labels.cpu().numpy() )
 
-        accuracy: float = accuracy_score( all_labels, all_predictions )
-        print( f"Test Accuracy: { accuracy }" )
-        return accuracy
+        return all_predictions, all_labels
 
     def test_image( self, image_tensor: torch.Tensor ) -> bool:
         with torch.no_grad():
             output: torch.Tensor = self( image_tensor )
-            return ( self.__evaluation_function( output ).float() > 0.5 )
+            return self.__evaluation_function( output ).float() > 0.5
 
     def save_model( self, path: str ) -> None:
         if not path:
