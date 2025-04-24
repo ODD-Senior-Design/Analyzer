@@ -12,7 +12,7 @@ spec:
   storageClassName: nfs
   volumeMode: Filesystem
   capacity:
-    storage: 5Gi
+    storage: 15Gi
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
@@ -25,7 +25,33 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: argo-analyzer-data
+  name: argo-analyzer-training-data
+  namespace: argo-analyzer
+spec:
+  storageClassName: nfs
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argo-analyzer-validation-data
+  namespace: argo-analyzer
+spec:
+  storageClassName: nfs
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argo-analyzer-testing-data
   namespace: argo-analyzer
 spec:
   storageClassName: nfs

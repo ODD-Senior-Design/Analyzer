@@ -5,9 +5,15 @@ metadata:
   namespace: argo-analyzer
 spec:
   volumes:
-    - name: argo-analyzer-volume
+    - name: argo-analyzer-training-volume
       persistentVolumeClaim:
-        claimName: argo-analyzer-data
+        claimName: argo-analyzer-training-data
+    - name: argo-analyzer-validation-volume
+      persistentVolumeClaim:
+        claimName: argo-analyzer-validation-data
+    - name: argo-analyzer-testing-volume
+      persistentVolumeClaim:
+        claimName: argo-analyzer-testing-data
     - name: shm-volume
       emptyDir:
         medium: Memory
@@ -24,7 +30,7 @@ spec:
         env:
           - name: DATASETS_PATH
             value: "/mnt/data/"
-          - name: SAVE_MODEL_PATH
+          - name: SAVED_MODEL_PATH
             value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
           - name: TRAIN
             value: "1"
@@ -41,7 +47,7 @@ spec:
           - name: LEARNING_RATE
             value: "0.001"
         volumeMounts:
-          - name: argo-analyzer-volume
+          - name: argo-analyzer-training-volume
             mountPath: /mnt/data/
           - name: shm-volume
             mountPath: /dev/shm
@@ -51,9 +57,9 @@ spec:
           kubernetes.io/hostname: main-server
         resources:
           requests:
-            cpu: "0.1"
-          limits:
             cpu: "2"
+          limits:
+            cpu: "4"
       tolerations:
         - key: "node-role.kubernetes.io/control-plane"
           operator: "Exists"
@@ -69,7 +75,7 @@ spec:
         env:
           - name: DATASETS_PATH
             value: "/mnt/data/"
-          - name: COMPILED_MODEL_PATH
+          - name: SAVED_MODEL_PATH
             value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
           - name: EVALUATE
             value: "1"
@@ -82,7 +88,7 @@ spec:
           - name: DATASET_PIN_MEMORY
             value: "1"
         volumeMounts:
-          - name: argo-analyzer-volume
+          - name: argo-analyzer-validation-volume
             mountPath: /mnt/data/
           - name: shm-volume
             mountPath: /dev/shm
@@ -92,9 +98,9 @@ spec:
           kubernetes.io/hostname: main-server
         resources:
           requests:
-            cpu: "0.1"
-          limits:
             cpu: "2"
+          limits:
+            cpu: "4"
       tolerations:
         - key: "node-role.kubernetes.io/control-plane"
           operator: "Exists"
@@ -110,7 +116,7 @@ spec:
         env:
           - name: DATASETS_PATH
             value: "/mnt/data/"
-          - name: COMPILED_MODEL_PATH
+          - name: SAVED_MODEL_PATH
             value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
           - name: TEST
             value: "1"
@@ -123,7 +129,7 @@ spec:
           - name: DATASET_PIN_MEMORY
             value: "1"
         volumeMounts:
-          - name: argo-analyzer-volume
+          - name: argo-analyzer-testing-volume
             mountPath: /mnt/data/
           - name: shm-volume
             mountPath: /dev/shm
@@ -133,9 +139,9 @@ spec:
           kubernetes.io/hostname: main-server
         resources:
           requests:
-            cpu: "0.1"
-          limits:
             cpu: "2"
+          limits:
+            cpu: "4"
       tolerations:
         - key: "node-role.kubernetes.io/control-plane"
           operator: "Exists"

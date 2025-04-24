@@ -25,7 +25,7 @@ datetime_format: str = getenv( "DATETIME_FORMAT" ) or '%Y-%m-%dT%H:%M:%S'
 datasets_path: str = getenv( "DATASETS_PATH" ) or './datasets'
 surpress_dataset_warnings: bool = getenv( "DATASET_SURPRESS_WARNINGS", "0" ) == '1'
 roboflow_api_key: Optional[ str ] = getenv( "ROBOFLOW_API_KEY" )
-saved_model_path: str = getenv( "saved_MODEL_PATH", "" )
+saved_model_path: str = getenv( "SAVED_MODEL_PATH", "" )
 
 batch_size: int = int( getenv( "DATASET_BATCH_SIZE" ) or 32 )
 shuffle: bool = getenv( "DATASET_SHUFFLE", "1" ) == '1'

@@ -15,9 +15,15 @@ spec:
         value: "false"
 
   volumes:
-    - name: argo-analyzer-volume
+    - name: argo-analyzer-training-volume
       persistentVolumeClaim:
-        claimName: argo-analyzer-data
+        claimName: argo-analyzer-training-data
+    - name: argo-analyzer-validation-volume
+      persistentVolumeClaim:
+        claimName: argo-analyzer-validation-data
+    - name: argo-analyzer-testing-volume
+      persistentVolumeClaim:
+        claimName: argo-analyzer-testing-data
     - name: shm-volume
       emptyDir:
         medium: Memory
