@@ -46,17 +46,24 @@ spec:
     - name: argo-analyzer-volume
       persistentVolumeClaim:
         claimName: argo-analyzer-data
+    - name: shm-volume
+      emptyDir:
+        medium: Memory
+        sizeLimit: 512Mi
+
   templates:
     - name: train-model
       container:
         image: eliteabhi/analyzer:argo-training
+        imagePullPolicy: Always
+        workingDir: /app
         command: ["python"]
         args: ["src/main.py"]
         env:
 
           # Configuration
           - name: DATASETS_PATH
-            value: "/mnt/data/combined_dataset" #! MUST BE DEFINED
+            value: "/mnt/data/" #! MUST BE DEFINED
           - name: SAVE_MODEL_PATH
             value: "/mnt/data/saved_models/BinaryAlexNet/model.pt" #? If None, sets to {CWD}/saved_models/<model_class_name>/model_<timestamp>.pt
 
@@ -79,11 +86,17 @@ spec:
         volumeMounts:
           - name: argo-analyzer-volume
             mountPath: /mnt/data/
+          - name: shm-volume
+            mountPath: /dev/shm
+        securityContext:
+          privileged: true
+
         resources:
           requests:
             cpu: "0.1"
           limits:
             cpu: "2"
+
       tolerations:
         - key: "node-role.kubernetes.io/control-plane"
           operator: "Exists"

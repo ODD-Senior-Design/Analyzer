@@ -6,13 +6,10 @@ CONFIG_FILE=".builddeploy.conf"
 # ===================== early arg parse (config file) =====================
 for arg in "$@"; do
   case "$arg" in
-    --config-file=*)
-      CONFIG_FILE="${arg#*=}"
-      ;;
+    --config-file=*) CONFIG_FILE="${arg#*=}" ;;
     -c)
       shift
-      CONFIG_FILE="$1"
-      ;;
+      CONFIG_FILE="$1" ;;
   esac
 done
 
@@ -21,6 +18,7 @@ IMAGE_NAME=""
 BUILDER_NAME="multiarch-builder"
 PLATFORMS=""
 REGISTRY=""
+DOCKERFILE_PATH="./Dockerfile"
 DOCKER_COMPOSE_COMMAND="sudo docker compose up -d"
 SUDO=""
 
@@ -29,7 +27,9 @@ if [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-# Prompt to choose sudo if not set by config or CLI
+SUDO="${SUDO:-sudo}"
+DOCKERFILE_PATH="${DOCKERFILE_PATH:-./Dockerfile}"
+
 if [[ -z "$SUDO" ]]; then
   read -rp "🔐 Do you want to use sudo for Docker commands? [Y/n]: " SUDO_CONFIRM
   if [[ -z "$SUDO_CONFIRM" || "$SUDO_CONFIRM" =~ ^[Yy]$ ]]; then
@@ -94,6 +94,10 @@ for arg in "$@"; do
     --no-confirm|-y) NO_CONFIRM=true ;;
     --no-cache|-C) NO_CACHE=true ;;
     --no-sudo|-S) SUDO="" ;;
+    --dockerfile=*) DOCKERFILE_PATH="${arg#*=}" ;;
+    -i)
+      shift
+      DOCKERFILE_PATH="$1" ;;
     --tag=auto|-t)
       if git rev-parse --short HEAD &>/dev/null; then
         AUTO_TAG="$(git rev-parse --short HEAD)"
@@ -116,7 +120,8 @@ for arg in "$@"; do
       echo "  -t, --tag=auto               Auto-tag using git SHA or timestamp"
       echo "  -C, --no-cache               Disable Docker build cache"
       echo "  -S, --no-sudo                Run Docker commands without sudo"
-      echo "  -c, --config-file FILE       Use custom config file"
+      echo "  -i, --dockerfile PATH        Path to Dockerfile (default: ./Dockerfile)"
+      echo "  -c, --config-file FILE       Use or create a custom config file"
       echo "      --image-name=NAME        Manually set image name"
       echo "      --builder-name=NAME      Manually set buildx builder name"
       echo "  -h, --help                   Show this help message and exit"
@@ -130,37 +135,26 @@ while true; do
     read -rp "❓ Enter Docker image name (e.g., username/repo:tag): " IMAGE_NAME
   fi
 
-  if [[ "$IMAGE_NAME" != *"/"* ]]; then
+  if [[ "$IMAGE_NAME" != */* ]]; then
     read -rp "🌐 Enter registry (leave blank for Docker Hub): " REGISTRY
-    if [[ -n "$REGISTRY" ]]; then
-      IMAGE_NAME="${REGISTRY}/${IMAGE_NAME}"
-    fi
+    [[ -n "$REGISTRY" ]] && IMAGE_NAME="$REGISTRY/$IMAGE_NAME"
   fi
 
-  if [[ -n "$AUTO_TAG" && "$IMAGE_NAME" != *:* ]]; then
-    IMAGE_NAME="${IMAGE_NAME}:${AUTO_TAG}"
-  fi
+  [[ -n "$AUTO_TAG" && "$IMAGE_NAME" != *:* ]] && IMAGE_NAME+=":$AUTO_TAG"
 
   if ! validate_image_name "$IMAGE_NAME"; then
     echo "❌ Invalid image name."
-    if $ALLOW_PRIVATE_REGISTRY; then
-      echo "   Format: [registry.domain.com/]username/repo[:tag]"
-    else
-      echo "   Format: username/repo[:tag]"
-    fi
+    [[ $ALLOW_PRIVATE_REGISTRY == true ]] && echo "   Format: [registry.domain.com/]username/repo[:tag]" || echo "   Format: username/repo[:tag]"
     IMAGE_NAME=""
     continue
   fi
 
   PLATFORM_REGEX='^linux/(amd64|arm64|386|arm/v[5-8]|ppc64le|s390x|riscv64)(,linux/(amd64|arm64|386|arm/v[5-8]|ppc64le|s390x|riscv64))*$'
   if [[ -z "$PLATFORMS" ]]; then
-    read -rp "🖥️ Enter target platforms (comma-separated, e.g., linux/amd64,linux/arm64). Leave blank for current arch: " PLATFORMS
+    read -rp "🖥️ Enter target platforms (comma-separated). Leave blank for current arch: " PLATFORMS
     if [[ -z "$PLATFORMS" ]]; then
-      if CURRENT_PLATFORM=$($SUDO docker info --format '{{.OSType}}/{{.Architecture}}' 2>/dev/null); then
-        PLATFORMS="$CURRENT_PLATFORM"
-      else
-        PLATFORMS="linux/amd64"
-      fi
+      CURRENT_PLATFORM="$($SUDO docker info --format '{{.OSType}}/{{.Architecture}}' 2>/dev/null || echo "linux/amd64")"
+      PLATFORMS="$CURRENT_PLATFORM"
     fi
   fi
 
@@ -172,42 +166,42 @@ while true; do
     continue
   fi
 
+  if [[ -z "$DOCKERFILE_PATH" ]]; then
+    read -rp "📦 Enter Dockerfile path [default: ./Dockerfile]: " DOCKERFILE_INPUT
+    DOCKERFILE_PATH="${DOCKERFILE_INPUT:-./Dockerfile}"
+  fi
+
   if $NO_CONFIRM; then
     break
   fi
 
   echo ""
   echo "📝 Final values:"
-  echo "   Image:     $IMAGE_NAME"
-  echo "   Platforms: $PLATFORMS"
+  echo "   Image:       $IMAGE_NAME"
+  echo "   Platforms:   $PLATFORMS"
+  echo "   Dockerfile:  $DOCKERFILE_PATH"
   read -rp "🔁 Are these correct? [Y/n]: " CONFIRM
-  if [[ -z "$CONFIRM" || "$CONFIRM" =~ ^[Yy]$ ]]; then
-    break
-  else
-    IMAGE_NAME=""
-    PLATFORMS=""
-  fi
+  [[ -z "$CONFIRM" || "$CONFIRM" =~ ^[Yy]$ ]] && break || IMAGE_NAME="" PLATFORMS="" DOCKERFILE_PATH=""
 done
 
 # ===================== validate builder name =====================
-if ! validate_builder_name "$BUILDER_NAME"; then
-  echo "❌ Invalid builder name: '$BUILDER_NAME'. Only letters, numbers, '.', '_', and '-' are allowed."
-  exit 1
-fi
+validate_builder_name "$BUILDER_NAME" || { echo "❌ Invalid builder name: '$BUILDER_NAME'"; exit 1; }
 
 # ===================== save config =====================
 cat > "$CONFIG_FILE" <<EOF
 IMAGE_NAME="$IMAGE_NAME"
 BUILDER_NAME="$BUILDER_NAME"
 PLATFORMS="$PLATFORMS"
+DOCKERFILE_PATH="$DOCKERFILE_PATH"
 DOCKER_COMPOSE_COMMAND="$DOCKER_COMPOSE_COMMAND"
 SUDO="$SUDO"
 EOF
-echo "💾 Configuration saved to '$CONFIG_FILE'"
+
+echo "📏 Configuration saved to '$CONFIG_FILE'"
 
 # ===================== builder setup =====================
 CREATED_BUILDER=false
-echo ""
+
 if ! $SUDO docker buildx inspect "$BUILDER_NAME" &>/dev/null; then
   echo "🔧 Setting up buildx for multi-arch support..."
   $SUDO docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
@@ -225,26 +219,16 @@ $SUDO docker buildx inspect --bootstrap
 echo ""
 echo "🚀 Building image '$IMAGE_NAME'..."
 
-BUILD_CMD="$SUDO docker buildx build --platform \"$PLATFORMS\" -t \"$IMAGE_NAME\" ."
-if $LOAD_INSTEAD_OF_PUSH; then
-  BUILD_CMD+=" --load"
-else
-  BUILD_CMD+=" --push"
-fi
-if $NO_CACHE; then
-  BUILD_CMD+=" --no-cache"
-fi
+BUILD_CMD="$SUDO docker buildx build --platform \"$PLATFORMS\" -t \"$IMAGE_NAME\" -f \"$DOCKERFILE_PATH\" ."
+$LOAD_INSTEAD_OF_PUSH && BUILD_CMD+=" --load" || BUILD_CMD+=" --push"
+$NO_CACHE && BUILD_CMD+=" --no-cache"
 
-if $DRY_RUN; then
-  echo "🔎 Dry-run: $BUILD_CMD"
-else
-  eval "$BUILD_CMD"
-fi
+$DRY_RUN && echo "🔎 Dry-run: $BUILD_CMD" || eval "$BUILD_CMD"
 
 # ===================== remove builder =====================
 echo ""
 if $ALWAYS_REMOVE_BUILDER; then
-  echo "🧹 Removing builder '$BUILDER_NAME'..."
+  echo "🪝 Removing builder '$BUILDER_NAME'..."
   $SUDO docker buildx rm "$BUILDER_NAME"
 else
   echo "ℹ️ Builder '$BUILDER_NAME' was kept."
@@ -256,9 +240,5 @@ if $BUILD_ONLY || $SKIP_DEPLOY; then
   echo "⏭️  Skipping deployment."
 else
   echo "🟢 Starting services with docker compose..."
-  if $DRY_RUN; then
-    echo "🔎 Dry-run: $DOCKER_COMPOSE_COMMAND"
-  else
-    eval "$DOCKER_COMPOSE_COMMAND"
-  fi
+  $DRY_RUN && echo "🔎 Dry-run: $DOCKER_COMPOSE_COMMAND" || eval "$DOCKER_COMPOSE_COMMAND"
 fi

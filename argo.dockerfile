@@ -9,13 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set working directory
 WORKDIR /app
 
-COPY ../requirements.txt .
+COPY ./requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
-COPY ../ .
+COPY . .
 
 # Create output directory for model saving
 RUN mkdir -p /mnt/output
