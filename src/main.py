@@ -33,7 +33,6 @@ batch_size: int = int( getenv( "DATASET_BATCH_SIZE" ) or 32 )
 shuffle: bool = getenv( "DATASET_SHUFFLE", "1" ) == '1'
 num_workers: int = int( getenv( "DATASET_NUM_WORKERS" ) or 4 )
 
-metrics_path: str = getenv( "METRICS_PATH", "./metrics" )
 evaluate: bool = getenv( "EVALUATE" ) == '1'
 
 test: bool = getenv( "TEST" ) == '1'
@@ -158,6 +157,7 @@ def start_evaluation() -> None:
     print( 'Starting evaluation...' )
     model.evaluate_model( validation_loader )
 
+    metrics_path = saved_model_path[ :saved_model_path.rfind( '/' ) ]
     raw_model_metrics = model.get_predictions( validation_loader, return_probs=True )
     model_metrics = model.get_predictions( validation_loader )
     evaluation_metrics_path, metrics, _, _ = save_metrics( model_metrics, raw_model_metrics, metrics_path, include_confusion_matrix=False, testing=False )
@@ -185,6 +185,7 @@ def start_testing() -> None:
     print( 'Starting testing...' )
     model.evaluate_model( testing_loader )
 
+    metrics_path = saved_model_path[ :saved_model_path.rfind( '/' ) ]
     raw_model_metrics = model.get_predictions( testing_loader, return_probs=True )
     model_metrics = model.get_predictions( testing_loader )
     test_metrics_path, metrics, confusion_matrix_path, confusion_matrix_df = save_metrics( model_metrics, raw_model_metrics, metrics_path, include_confusion_matrix=True, testing=True )

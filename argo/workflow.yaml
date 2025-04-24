@@ -15,6 +15,9 @@ spec:
       - name: test_model
         value: "true"
 
+      - name: model_path
+        value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+
   volumes:
     - name: argo-analyzer-training-volume
       persistentVolumeClaim:
@@ -39,6 +42,8 @@ spec:
             template: check-model
             arguments:
               parameters:
+                - name: model_path
+                  value: "{{workflow.parameters.model_path}}"
                 - name: force_training
                   value: "{{workflow.parameters.force_training}}"
 
@@ -47,6 +52,10 @@ spec:
               name: analyzer-templates
               template: train-model
               namespace: argo-analyzer
+            arguments:
+              parameters:
+                - name: model_path
+                  value: "{{workflow.parameters.model_path}}"
             dependencies: [ check-model-exists ]
             when: "{{tasks.check-model-exists.outputs.parameters.should_train}} == true"
 
@@ -55,6 +64,10 @@ spec:
               name: analyzer-templates
               template: validate-model
               namespace: argo-analyzer
+            arguments:
+              parameters:
+                - name: model_path
+                  value: "{{workflow.parameters.model_path}}"
             dependencies: [ train ]
             when: "{{workflow.parameters.validate_model}} == true"
 
@@ -63,27 +76,35 @@ spec:
               name: analyzer-templates
               template: test-model
               namespace: argo-analyzer
-            dependencies: [train]
+            arguments:
+              parameters:
+                - name: model_path
+                  value: "{{workflow.parameters.model_path}}"
+            dependencies: [ train ]
             when: "{{workflow.parameters.test_model}} == true"
 
     - name: check-model
       inputs:
         parameters:
           - name: force_training
+          - name: model_path
       script:
         image: python:3.10-slim
-        command: [python]
+        command: [ python ]
         volumeMounts:
           - name: argo-analyzer-training-volume
             mountPath: /mnt/data
         env:
           - name: FORCE_TRAINING
             value: "{{inputs.parameters.force_training}}"
+          - name: MODEL_PATH
+            value: "{{inputs.parameters.model_path}}"
         source: |
           import os
 
           force_training = os.getenv("FORCE_TRAINING", "false").lower() == "true"
-          model_path = "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+          model_path = os.getenv("MODEL_PATH", "/mnt/data/saved_models/BinaryAlexNet/model.pt")
+          print(f'Checking model at: {model_path}')
           should_train = force_training or not os.path.isfile(model_path)
 
           print("should_train =", should_train)

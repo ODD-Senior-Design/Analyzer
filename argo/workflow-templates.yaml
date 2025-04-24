@@ -21,6 +21,9 @@ spec:
   templates:
 
     - name: train-model
+      inputs:
+        parameters:
+          - name: model_path
       container:
         image: eliteabhi/analyzer:argo
         imagePullPolicy: Always
@@ -31,7 +34,7 @@ spec:
           - name: DATASETS_PATH
             value: "/mnt/data/"
           - name: SAVED_MODEL_PATH
-            value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+            value: "{{inputs.parameters.model_path}}"
           - name: TRAIN
             value: "1"
           - name: DATASET_BATCH_SIZE
@@ -66,6 +69,9 @@ spec:
           effect: "NoSchedule"
 
     - name: validate-model
+      inputs:
+        parameters:
+          - name: model_path
       container:
         image: eliteabhi/analyzer:argo
         imagePullPolicy: Always
@@ -76,9 +82,7 @@ spec:
           - name: DATASETS_PATH
             value: "/mnt/data/"
           - name: SAVED_MODEL_PATH
-            value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
-          - name: "METRICS_PATH"
-            value: "/mnt/data/saved_models/BinaryAlexNet"
+            value: "{{inputs.parameters.model_path}}"
           - name: TRAIN
             value: "0"
           - name: EVALUATE
@@ -109,6 +113,9 @@ spec:
           effect: "NoSchedule"
 
     - name: test-model
+      inputs:
+        parameters:
+          - name: model_path
       container:
         image: eliteabhi/analyzer:argo
         imagePullPolicy: Always
@@ -119,9 +126,7 @@ spec:
           - name: DATASETS_PATH
             value: "/mnt/data/"
           - name: SAVED_MODEL_PATH
-            value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
-          - name: "METRICS_PATH"
-            value: "/mnt/data/saved_models/BinaryAlexNet"
+            value: "{{inputs.parameters.model_path}}"
           - name: TRAIN
             value: "0"
           - name: TEST
