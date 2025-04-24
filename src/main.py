@@ -1,19 +1,21 @@
-from os import getenv, path
+from os import getenv, makedirs, path
 from dotenv import load_dotenv
 from warnings import warn
 
 from PIL import Image
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Tuple, List, Any
 
 from flask import Flask, Response, jsonify, request
 
-import json
 import torch
 from torch.optim import Adam
 from torch.nn import BCEWithLogitsLoss
 
-from sklearn.metrics import precision_score, recall_score, f1_score
+import numpy as np
+import pandas as pd
+import json
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
 from model import CNN
 from data_handler import Preproccessor, unpack, get_combined_dataset_dataloader
@@ -31,8 +33,10 @@ batch_size: int = int( getenv( "DATASET_BATCH_SIZE" ) or 32 )
 shuffle: bool = getenv( "DATASET_SHUFFLE", "1" ) == '1'
 num_workers: int = int( getenv( "DATASET_NUM_WORKERS" ) or 4 )
 
+metrics_path: str = getenv( "METRICS_PATH", "./metrics" )
 evaluate: bool = getenv( "EVALUATE" ) == '1'
-evaluation_metrics_path: str = getenv( "EVALUATION_METRICS_PATH" ) or './model/model_evaluation_metrics.json'
+
+test: bool = getenv( "TEST" ) == '1'
 
 train: bool = getenv( "TRAIN" ) == '1'
 training_learning_rate: float = float( getenv( "TRAINING_LEARNING_RATE" ) or 0.001 )
@@ -75,6 +79,40 @@ def validate_combined_dataset( surpress_warnings ) -> None:
 
     unpack( datasets_path, roboflow_api_key, dry_run_datasets )
 
+def save_metrics( model_metrics: Tuple[ List[ float ], List[ float ] ], metrics_save_dir: str, include_confusion_matrix: bool = False ) -> Tuple[ str, Dict[ str, Any ], Optional[ str ], Optional [ pd.DataFrame ] ]:
+    if metrics_save_dir == './metrics' and not path.exists( metrics_save_dir ):
+        makedirs( path.dirname( metrics_save_dir ), exist_ok=True )
+
+    elif not path.exists( metrics_save_dir ):
+        raise FileNotFoundError( f'Direcory { metrics_save_dir } does not exist.' )
+
+    accuracy: float = float( accuracy_score( *model_metrics ) )
+    precision: float = float( precision_score( *model_metrics ) )
+    recall: float = float( recall_score( *model_metrics ) )
+    f1: float = float( f1_score( *model_metrics ) )
+    cm: np.ndarray = confusion_matrix( *model_metrics )
+    timestamp: str = datetime.now().strftime( datetime_format )
+
+    metrics: Dict[ str, Any ] = {
+        'timestamp': timestamp,
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1,
+    } | ( { 'confusion_matrix': cm } if include_confusion_matrix else {} )
+
+    metrics_file_path = f'{ metrics_save_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics_{ timestamp }.json'
+
+    confusion_matrix_file_path = f'{ metrics_save_dir }/metrics_{ timestamp }.csv' if include_confusion_matrix else None
+    confusion_matrix_df = pd.DataFrame( cm, index = [ "Actual 0", "Actual 1" ], columns = [ "Predicted 0", "Predicted 1" ] ) if include_confusion_matrix else None
+    with open( metrics_file_path, 'w', encoding='utf-8' ) as f:
+        json.dump( metrics, f, indent = 4 )
+
+    if confusion_matrix_df is not None:
+        confusion_matrix_df.to_csv( confusion_matrix_file_path, index = True )
+
+    return metrics_file_path, metrics, confusion_matrix_file_path, confusion_matrix_df
+
 def start_training() -> None:
     print( 'Validating Combined Dataset...' )
     validate_combined_dataset( surpress_warnings=surpress_dataset_warnings )
@@ -85,9 +123,9 @@ def start_training() -> None:
     print( 'Training Model...' )
     model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate ), loss_fn=BCEWithLogitsLoss(), num_epochs=10 )
 
-    print( 'Training Model Completed!' )
-    model.save_model( saved_model_path )
-    print( 'Model state dict saved to:', saved_model_path )
+    print( '\nTraining Model Completed!' )
+    model_path = model.save_model( saved_model_path )
+    print( 'Model state dict saved to:', model_path )
 
 def start_evaluation() -> None:
     print( 'Validating Combined Dataset...' )
@@ -100,32 +138,40 @@ def start_evaluation() -> None:
     model.load_model( saved_model_path )
 
     print( 'Starting evaluation...' )
-    accuracy: float = model.evaluate_model( validation_loader )
+    model.evaluate_model( validation_loader )
 
-    all_preds, all_labels = model.get_predictions( validation_loader )
-    precision: float = float( precision_score( all_labels, all_preds ) )
-    recall: float = float( recall_score( all_labels, all_preds ) )
-    f1: float = float( f1_score( all_labels, all_preds ) )
-    timestamp: str = datetime.now().strftime( datetime_format )
+    model_metrics = model.get_predictions( validation_loader )
+    evaluation_metrics_path, metrics, _, _ = save_metrics( model_metrics, metrics_path, include_confusion_matrix=False )
 
-    metrics: Dict[ str, Any ] = {
-            'timestamp': timestamp,
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall,
-            'f1_score': f1
-    }
+    print( f'\nEvaluation metrics:\n{ metrics }\n' )
+    print( f"Evaluation metrics saved to: { evaluation_metrics_path }" )
 
-    with open( evaluation_metrics_path, 'w', encoding='utf-8' ) as file:
-        json.dump( metrics, file, indent = 4 )
+def start_testing() -> None:
+    print( 'Validating Combined Dataset...' )
+    validate_combined_dataset( surpress_warnings = surpress_dataset_warnings )
 
-    checkpoint_path: str = evaluation_metrics_path.replace( '.json', f'_{timestamp}.json' )
-    with open( checkpoint_path, 'w', encoding='utf-8' ) as file:
-        json.dump( metrics, file, indent = 4 )
+    print( 'Loading and preprocessing dataset...' )
+    testing_loader = get_combined_dataset_dataloader(
+        f'{ datasets_path }/combined_dataset/test',
+        preprocess = True,
+        batch_size = batch_size,
+        shuffle = shuffle,
+        num_workers = num_workers
+    )
 
-    print( f"Evaluation metrics saved to: {evaluation_metrics_path}" )
-    print( f"Checkpointed metrics saved to: {checkpoint_path}" )
+    print( 'Loading model...' )
+    model.load_model( saved_model_path )
 
+    print( 'Starting testing...' )
+    model.evaluate_model( testing_loader )
+
+    model_metrics = model.get_predictions( testing_loader )
+    test_metrics_path, metrics, confusion_matrix_path, confusion_matrix_df = save_metrics( model_metrics, metrics_path, include_confusion_matrix=False )
+
+    print( f'\nTest metrics:\n{ metrics }\n' )
+    print( f"Test metrics saved to: { test_metrics_path }" )
+    print( f"Confusion Matrix:\n{ confusion_matrix_df }" )
+    print( f"Confusion matrix saved to: { confusion_matrix_path }" )
 
 
 def start_analyzer() -> None:
@@ -146,6 +192,10 @@ def main() -> None:
     elif evaluate:
         print( 'Starting Evaluation...' )
         start_evaluation()
+
+    elif test:
+        print( 'Starting Testing...' )
+        start_testing()
 
     else:
         print( 'Starting Analyzer...' )

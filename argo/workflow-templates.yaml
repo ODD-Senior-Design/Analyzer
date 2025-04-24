@@ -77,6 +77,8 @@ spec:
             value: "/mnt/data/"
           - name: SAVED_MODEL_PATH
             value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+          - name: "METRICS_PATH"
+            value: "/mnt/data/saved_models/BinaryAlexNet"
           - name: TRAIN
             value: "0"
           - name: EVALUATE
@@ -120,6 +122,8 @@ spec:
             value: "/mnt/data/"
           - name: SAVED_MODEL_PATH
             value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
+          - name: "METRICS_PATH"
+            value: "/mnt/data/saved_models/BinaryAlexNet"
           - name: TRAIN
             value: "0"
           - name: TEST

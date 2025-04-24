@@ -231,21 +231,21 @@ class CNN( Module ):
                 all_predictions.extend( predictions.cpu().numpy() )
                 all_labels.extend( labels.cpu().numpy() )
 
-        return all_predictions, all_labels
+        return all_labels, all_predictions
 
     def test_image( self, image_tensor: torch.Tensor ) -> bool:
         with torch.no_grad():
             output: torch.Tensor = self( image_tensor )
             return self.__evaluation_function( output ).float() > 0.5
 
-    def save_model( self, path: str ) -> None:
-        if not path:
+    def save_model( self, model_save_path: str ) -> str:
+        if not os.path.exists( model_save_path ):
             timestamp = datetime.datetime.now().strftime( "%Y%m%d_%H%M%S" )
-            path = f"./saved_models/{ self.model.__class__.__name__ }/model_{ timestamp }.pt"
+            model_save_path = f"./saved_models/{ self.model.__class__.__name__ }/model_{ timestamp }.pt"
 
-        os.makedirs( os.path.dirname( path ), exist_ok=True )
-        torch.save( self.state_dict(), path )
-        print( f"Model saved to { path }" )
+        os.makedirs( os.path.dirname( model_save_path ), exist_ok=True )
+        torch.save( self.state_dict(), model_save_path )
+        return model_save_path
 
     def load_model( self, model_path: str ) -> None:
 
