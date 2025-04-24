@@ -91,6 +91,9 @@ spec:
         securityContext:
           privileged: true
 
+        nodeSelector:
+          kubernetes.io/hostname: main-server
+
         resources:
           requests:
             cpu: "0.1"
