@@ -17,10 +17,11 @@ from sample_model import BinaryAlexNet
 
 class CNN( Module ):
 
-    def __init__( self, model_class: Optional[ Type[ Module ] ] = None, model_kwargs: Optional[ Dict[ str, Any ] ] = None, evaluation_function = torch.sigmoid ) -> None:
+    def __init__( self, model_class: Optional[ Type[ Module ] ] = None, model_kwargs: Optional[ Dict[ str, Any ] ] = None, evaluation_function = torch.sigmoid, device = torch.device( 'cpu' ) ) -> None:
         super().__init__()
         self.__loss_values: List[ float ] = []
         self.__evaluation_function = evaluation_function
+        self.__device = device
 
         if model_class is None:
             model_class = self.BinaryAlexNet
@@ -77,17 +78,16 @@ class CNN( Module ):
         plt.ylabel( 'Loss' )
         plt.show()
 
-    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, compute_device: torch.device = torch.device( 'cpu' ), plot_loss: bool = True ) -> None:
+    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, plot_loss: bool = True ) -> None:
 
-        device_type: str = compute_device.type
-        use_amp: bool = device_type == 'cuda'
-        amp_context = torch.autocast( device_type = device_type ) if use_amp else nullcontext()
+        use_amp: bool = self.__device.type == 'cuda'
+        amp_context = torch.autocast( self.__device.type ) if use_amp else nullcontext()
         scaler = grad_scaler.GradScaler() if use_amp else None
 
         if hasattr( self, "compile" ) and use_amp:
             self.compile()
 
-        self.to( compute_device )
+        self.to( self.__device )
         self.train()
 
         for epoch in range( num_epochs ):
@@ -97,7 +97,7 @@ class CNN( Module ):
             dataloader = tqdm( dataset, desc=f"Epoch { epoch+1 }/{ num_epochs }" )
 
             for inputs, labels in dataloader:
-                inputs, labels = inputs.to( compute_device ), labels.to( compute_device )
+                inputs, labels = inputs.to( self.__device ), labels.to( self.__device )
                 optimizer.zero_grad()
 
                 with amp_context:
@@ -123,11 +123,11 @@ class CNN( Module ):
             if plot_loss:
                 self.plot_loss( 'Training Loss' )
 
-    def evaluate_model( self, data: DataLoader, compute_device: torch.device = torch.device( 'cpu' ) ) -> float:
+    def evaluate_model( self, data: DataLoader ) -> float:
         if hasattr( self, "compile" ):
             self.compile()
 
-        self.to( compute_device )
+        self.to( self.__device )
         self.eval()
 
         all_predictions: List[ float ] = []
@@ -135,7 +135,7 @@ class CNN( Module ):
 
         with torch.no_grad():
             for inputs, labels in data:
-                inputs, labels = inputs.to( compute_device ), labels.to( compute_device ).float()
+                inputs, labels = inputs.to( self.__device ), labels.to( self.__device ).float()
                 outputs: torch.Tensor = self( inputs )
                 predictions: torch.Tensor = ( self.__evaluation_function( outputs ) > 0.5 ).float()
                 all_predictions.extend( predictions.cpu().numpy() )
@@ -159,7 +159,7 @@ class CNN( Module ):
         torch.save( self.state_dict(), path )
         print( f"Model saved to { path }" )
 
-    def load_model( self, model_path: str, device: torch.device = torch.device( 'cpu' ) ) -> None:
+    def load_model( self, model_path: str ) -> None:
 
         if not model_path.endswith( '.pth' ):
             raise ValueError( 'Model file must be a PyTorch (.pth) file' )
@@ -167,7 +167,7 @@ class CNN( Module ):
         if not os.path.exists( model_path ):
             raise FileNotFoundError( f'Model file not found at { model_path }' )
 
-        self.load_state_dict( torch.load( model_path, map_location=device ) )
-        self.to( device )
+        self.load_state_dict( torch.load( model_path, map_location=self.__device ) )
+        self.to( self.__device )
         self.eval()
         print( f"Model loaded from { model_path }" )

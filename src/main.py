@@ -8,6 +8,7 @@ from typing import Dict, Optional
 
 from flask import Flask, Response, jsonify, request
 
+import torch
 from torch.optim import Adam
 from torch.nn import CrossEntropyLoss
 
@@ -40,7 +41,7 @@ debug: bool = getenv( "DEBUG" ) == '1'
 bind_address: str = getenv( "BIND_ADDRESS" ) or '0.0.0.0'
 bind_port: int = int( getenv( "BIND_PORT" ) or 9000 )
 
-model = CNN()
+model = CNN( device=torch.device( 'cuda' if torch.cuda.is_available() else 'cpu' ) )
 
 @webhook.route( "/analyze", methods=[ "POST" ] )
 def analyze_image_webhook() -> Response:
