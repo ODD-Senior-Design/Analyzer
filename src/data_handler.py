@@ -279,10 +279,18 @@ class CombinedDataset( torch.utils.data.Dataset ):
         return image, label
 
 
-def get_combined_dataset_dataloader( combined_dataset_path: str, preprocess = True, batch_size: int = 32, shuffle: bool = True, num_workers: int = 4, pin_memory = True ) -> DataLoader:
+def get_combined_dataset_dataloader( combined_dataset_path: str, preprocess = True, batch_size: int = 32, shuffle: bool = True, num_workers: int = 2 ) -> DataLoader:
     transform = Preproccessor().get_transform() if preprocess else None
     combined_dataset = CombinedDataset( combined_dataset_path, transform )
-    return DataLoader( dataset=combined_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory )
+    return DataLoader(
+        dataset=combined_dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True
+    )
+
 
 def unpack( datasets_path: str, roboflow_api_key: Optional[ str ] = None, overwrite: bool = True, clean: bool = False, clean_max_workers: int = 8, no_exit = False) -> None:
     if not roboflow_api_key:

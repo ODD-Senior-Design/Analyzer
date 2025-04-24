@@ -27,7 +27,6 @@ saved_model_path: str = getenv( "saved_MODEL_PATH", "" )
 batch_size: int = int( getenv( "DATASET_BATCH_SIZE" ) or 32 )
 shuffle: bool = getenv( "DATASET_SHUFFLE", "1" ) == '1'
 num_workers: int = int( getenv( "DATASET_NUM_WORKERS" ) or 4 )
-pin_memory: bool = getenv( "DATASET_PIN_MEMORY", "1" ) == '1'
 
 evaluate: bool = getenv( "EVALUATE" ) == '1'
 evaluation_metrics_path: str = getenv( "EVALUATION_METRICS_PATH" ) or './model/model_evaluation_metrics.json'
@@ -78,7 +77,7 @@ def start_training() -> None:
     validate_combined_dataset( surpress_warnings=surpress_dataset_warnings )
 
     print( 'Loading and preprocessing dataset...' )
-    combined_dataset_dataloader = get_combined_dataset_dataloader( f'{ datasets_path }/combined_dataset/train', preprocess = True, batch_size=batch_size, shuffle = shuffle, num_workers = num_workers, pin_memory = pin_memory )
+    combined_dataset_dataloader = get_combined_dataset_dataloader( f'{ datasets_path }/combined_dataset/train', preprocess = True, batch_size=batch_size, shuffle = shuffle, num_workers = num_workers )
 
     print( 'Training Model...' )
     model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate ), loss_fn=CrossEntropyLoss(), num_epochs=10 )

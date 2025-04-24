@@ -1,10 +1,13 @@
 import os
+import sys
 import matplotlib.pyplot as plt
 import time
 import datetime
 from tqdm import tqdm
 from contextlib import nullcontext
 
+import numpy as np
+import random
 import torch
 from torch.amp import grad_scaler
 from torch.utils.data import DataLoader
@@ -12,8 +15,6 @@ from torch.optim import Optimizer
 from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout
 from sklearn.metrics import accuracy_score
 from typing import List, Optional, Type, Dict, Any
-
-from sample_model import BinaryAlexNet
 
 class CNN( Module ):
 
@@ -78,7 +79,14 @@ class CNN( Module ):
         plt.ylabel( 'Loss' )
         plt.show()
 
-    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, plot_loss: bool = True ) -> None:
+    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, plot_loss: bool = True, scheduler: Optional[Any] = None, accumulation_steps: int = 1, early_stop_patience: int = 5, seed: int = 42 ) -> None:
+
+        # Reproducibility
+        torch.manual_seed( seed )
+        np.random.seed( seed )
+        random.seed( seed )
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
         use_amp: bool = self.__device.type == 'cuda'
         amp_context = torch.autocast( self.__device.type ) if use_amp else nullcontext()
@@ -90,38 +98,74 @@ class CNN( Module ):
         self.to( self.__device )
         self.train()
 
+        best_loss: float = float('inf')
+        patience_counter: int = 0
+
         for epoch in range( num_epochs ):
             start_time: float = time.time()
             running_loss: float = 0.0
 
-            dataloader = tqdm( dataset, desc=f"Epoch { epoch+1 }/{ num_epochs }" )
+            is_interactive = sys.stdout.isatty()
+            dataloader = tqdm( dataset,
+                                desc=f"Epoch { epoch+1 }/{ num_epochs }",
+                                dynamic_ncols=not is_interactive,
+                                file=sys.stdout if is_interactive else None,
+                                disable=False )
 
-            for inputs, labels in dataloader:
-                inputs, labels = inputs.to( self.__device ), labels.to( self.__device )
+            for step, (inputs, labels) in enumerate( dataloader ):
+                inputs, labels = inputs.to( self.__device, non_blocking=True ), labels.to( self.__device, non_blocking=True )
                 optimizer.zero_grad()
 
                 with amp_context:
                     outputs: torch.Tensor = self( inputs )
-                    loss: torch.Tensor = loss_fn( outputs, labels )
+                    loss: torch.Tensor = loss_fn( outputs, labels ) / accumulation_steps
 
                 if scaler:
                     scaler.scale( loss ).backward()
-                    scaler.step( optimizer )
-                    scaler.update()
+                    if ( step + 1 ) % accumulation_steps == 0:
+                        scaler.step( optimizer )
+                        scaler.update()
+                        optimizer.zero_grad()
                 else:
                     loss.backward()
-                    optimizer.step()
+                    if ( step + 1 ) % accumulation_steps == 0:
+                        optimizer.step()
+                        optimizer.zero_grad()
 
-                running_loss += loss.item()
-                dataloader.set_postfix( loss=loss.item() )
+                running_loss += loss.item() * accumulation_steps
+
+                if is_interactive:
+                    dataloader.set_postfix( loss=loss.item() * accumulation_steps )
+                else:
+                    print( f"[Epoch { epoch+1 }], Loss: {( loss.item() * accumulation_steps ):.4f}", flush=True )
+
+            if scheduler:
+                scheduler.step()
 
             epoch_loss: float = running_loss / len( dataset )
             epoch_duration: float = time.time() - start_time
             self.__loss_values.append( epoch_loss )
-            print( f"Epoch { epoch+1 } Loss: { epoch_loss } | Duration: { epoch_duration }s" )
+            print( f"Epoch { epoch+1 } Loss: { epoch_loss:.4f } | Duration: {epoch_duration:.2f}s" )
+
+            with open( "training_log.csv", "a", encoding="utf-8" ) as f:
+                f.write( f"{ epoch+1 },{epoch_loss:.4f},{ epoch_duration:.2f}\n" )
 
             if plot_loss:
                 self.plot_loss( 'Training Loss' )
+
+            # Save model every 5 epochs
+            if ( epoch + 1 ) % 5 == 0:
+                torch.save( self.state_dict(), f"model_epoch_{ epoch+1 }.pt" )
+
+            # Early stopping
+            if epoch_loss > best_loss:
+                patience_counter += 1
+                if patience_counter >= early_stop_patience:
+                    print( f"[INFO] Early stopping at epoch { epoch+1 }", flush=True )
+                    break
+            else:
+                best_loss = epoch_loss
+                patience_counter = 0
 
     def evaluate_model( self, data: DataLoader ) -> float:
         if hasattr( self, "compile" ):
@@ -151,9 +195,9 @@ class CNN( Module ):
             return ( self.__evaluation_function( output ).float() > 0.5 )
 
     def save_model( self, path: str ) -> None:
-        if path is None:
+        if not path:
             timestamp = datetime.datetime.now().strftime( "%Y%m%d_%H%M%S" )
-            path = f"./saved_models/{ BinaryAlexNet.__name__ }/model_{ timestamp }.pt"
+            path = f"./saved_models/{ self.model.__class__.__name__ }/model_{ timestamp }.pt"
 
         os.makedirs( os.path.dirname( path ), exist_ok=True )
         torch.save( self.state_dict(), path )
