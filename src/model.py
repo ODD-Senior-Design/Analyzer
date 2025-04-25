@@ -7,12 +7,13 @@ from tqdm import tqdm
 from contextlib import nullcontext
 
 import numpy as np
+import pandas as pd
 import random
 import torch
 from torch.amp import grad_scaler
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
-from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout
+from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout, BCEWithLogitsLoss
 from sklearn.metrics import accuracy_score
 from typing import List, Optional, Type, Tuple, Dict, Any
 
@@ -90,8 +91,8 @@ class CNN( Module ):
 
         plt.close()
 
-    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, num_epochs: int = 10, scheduler: Optional[Any] = None, accumulation_steps: int = 1, early_stop_patience: int = 5, seed: int = 42 ) -> None:
-        # Reproducibility
+    def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, epoch_metrics_save_path: str, num_epochs: int = 10, scheduler: Optional[ Any ] = None, accumulation_steps: int = 1, early_stop_patience: int = 5, seed: int = 42 ) -> None:
+
         torch.manual_seed( seed )
         np.random.seed( seed )
         random.seed( seed )
@@ -108,21 +109,24 @@ class CNN( Module ):
         self.to( self.__device )
         self.train()
 
-        best_loss: float = float('inf')
+        best_loss: float = float( 'inf' )
         patience_counter: int = 0
+        epoch_metrics: List[ Dict[ str, Any ] ] = []
 
         for epoch in range( num_epochs ):
             start_time: float = time.time()
             running_loss: float = 0.0
+            all_preds: List[ float ] = []
+            all_labels: List[ float ] = []
 
             is_interactive = sys.stdout.isatty()
             dataloader = tqdm( dataset,
-                                desc=f"Epoch {epoch+1}/{num_epochs}",
-                                dynamic_ncols=not is_interactive,
-                                file=sys.stdout if is_interactive else None,
-                                disable=False )
+                            desc = f"Epoch { epoch+1 }/{ num_epochs }",
+                            dynamic_ncols = not is_interactive,
+                            file = sys.stdout if is_interactive else None,
+                            disable = False )
 
-            for step, (inputs, labels) in enumerate( dataloader ):
+            for step, ( inputs, labels ) in enumerate( dataloader ):
                 inputs = inputs.to( self.__device, non_blocking=True )
                 labels = labels.to( self.__device, non_blocking=True ).float().unsqueeze( 1 )
                 optimizer.zero_grad()
@@ -145,8 +149,12 @@ class CNN( Module ):
 
                 running_loss += loss.item() * accumulation_steps
 
+                preds: torch.Tensor = ( torch.sigmoid( outputs ) > 0.5 ).float()
+                all_preds.extend( preds.cpu().numpy() )
+                all_labels.extend( labels.cpu().numpy() )
+
                 if is_interactive:
-                    dataloader.set_postfix( loss=loss.item() * accumulation_steps )
+                    dataloader.set_postfix( loss = loss.item() * accumulation_steps )
                 else:
                     print( f"[Epoch { epoch+1 }], Loss: {( loss.item() * accumulation_steps ):.4f}", flush=True )
 
@@ -155,10 +163,18 @@ class CNN( Module ):
 
             epoch_loss: float = running_loss / len( dataset )
             epoch_duration: float = time.time() - start_time
-            self.__loss_values.append( epoch_loss )
-            print( f"Epoch { epoch+1 } Loss: {epoch_loss:.4f} | Duration: {epoch_duration:.2f}s" )
+            accuracy: float = np.mean( np.array( all_preds ) == np.array( all_labels ) )
 
-            # Early stopping
+            self.__loss_values.append( epoch_loss )
+            print( f"Epoch { epoch+1 } Loss: {epoch_loss:.4f} | Accuracy: {accuracy:.4f} | Duration: {epoch_duration:.2f}s" )
+
+            epoch_metrics.append({
+                "epoch": epoch + 1,
+                "loss": epoch_loss,
+                "accuracy": accuracy,
+                "duration_sec": epoch_duration
+            })
+
             if epoch_loss > best_loss:
                 patience_counter += 1
                 if patience_counter >= early_stop_patience:
@@ -167,6 +183,8 @@ class CNN( Module ):
             else:
                 best_loss = epoch_loss
                 patience_counter = 0
+
+        pd.DataFrame( epoch_metrics ).to_csv( epoch_metrics_save_path, index=False )
 
     def evaluate_model( self, data: DataLoader, threshold = 0.5 ) -> float:
         if hasattr( self, "compile" ) and not getattr( self, "_is_compiled", False ):

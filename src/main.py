@@ -86,7 +86,7 @@ def save_metrics( model_metrics: Tuple[ np.ndarray, np.ndarray ], raw_model_metr
         makedirs( metrics_save_dir, exist_ok = True )
     elif not path.exists( metrics_save_dir ):
         raise FileNotFoundError( f'Directory { metrics_save_dir } does not exist.' )
-    
+
     metrics_save_dir = f'{ metrics_save_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics'
     makedirs( metrics_save_dir, exist_ok=True )
 
@@ -137,15 +137,19 @@ def start_training() -> None:
     print( 'Loading and preprocessing dataset...' )
     combined_dataset_dataloader = get_combined_dataset_dataloader( f'{ datasets_path }/combined_dataset/train', preprocess = True, batch_size=batch_size, shuffle = shuffle, num_workers = num_workers )
 
+    model_dir = saved_model_path[ :saved_model_path.rfind( '/' ) ]
+    epochs_metrics_path = f'{ model_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics/{ path.basename( saved_model_path ).split( '.' )[0] }_training_epochs_metrics.csv'
+    makedirs( f'{ model_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics', exist_ok=True )
+
     print( 'Training Model...' )
-    model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate, weight_decay=training_weight_decay ), loss_fn=BCEWithLogitsLoss(), num_epochs=10 )
+    model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate, weight_decay=training_weight_decay ), epoch_metrics_save_path=epochs_metrics_path , loss_fn = BCEWithLogitsLoss(), num_epochs=training_epocs )
 
     print( '\nTraining Model Completed!' )
 
     model_path = model.save_model( saved_model_path )
     print( 'Model state dict saved to:', model_path )
 
-    model.plot_loss( save_path=f'{ model_path[ :model_path.rfind( '/' ) ] }/{ path.basename( model_path ).split( '.' )[0] }_loss_chart_{ datetime.now().strftime( datetime_format ) }.png' )
+    model.plot_loss( save_path=f'{ model_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics/{ path.basename( model_path ).split( '.' )[0] }_loss_chart_{ datetime.now().strftime( datetime_format ) }.png' )
 
 def start_evaluation() -> None:
     print( 'Validating Combined Dataset...' )

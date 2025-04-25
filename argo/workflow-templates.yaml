@@ -50,13 +50,13 @@ spec:
             value: "{{inputs.parameters.shuffle}}"
           - name: DATASET_NUM_WORKERS
             value: "{{inputs.parameters.num_workers}}"
-          - name: NUM_EPOCHS
+          - name: TRAINING_EPOCHS
             value: "{{inputs.parameters.training_epochs}}"
-          - name: LEARNING_RATE
+          - name: TRAINING_LEARNING_RATE
             value: "{{inputs.parameters.training_learning_rate}}"
           - name: MODEL_DROPOUT
             value: "{{inputs.parameters.model_dropout}}"
-          - name: WEIGHT_DECAY
+          - name: TRAINING_WEIGHT_DECAY
             value: "{{inputs.parameters.training_weight_decay}}"
         volumeMounts:
           - name: argo-analyzer-training-volume
