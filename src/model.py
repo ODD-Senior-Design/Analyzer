@@ -248,7 +248,7 @@ class CNN( Module ):
             return self.__evaluation_function( output ).float() > 0.5
 
     def save_model( self, model_save_path: str ) -> str:
-        if not os.path.exists( model_save_path ):
+        if not model_save_path:
             timestamp = datetime.datetime.now().strftime( "%Y%m%d_%H%M%S" )
             model_save_path = f"./saved_models/{ self.model.__class__.__name__ }/model_{ timestamp }.pt"
 

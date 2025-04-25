@@ -1,3 +1,4 @@
+*.pt
 datasets/*
 !datasets/datasets_manifest.json
 !datasets/remove_list.csv
