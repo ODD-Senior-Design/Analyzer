@@ -202,6 +202,14 @@ def start_testing() -> None:
     print( f"Test metrics saved to: { test_metrics_path }" )
     print( f"Confusion Matrix:\n{ confusion_matrix_df }" )
     print( f"Confusion matrix saved to: { confusion_matrix_path }" )
+    
+    y_true_shuffled = np.random.permutation( model_metrics[ 0 ] )
+
+    print("\n=== Shuffled Labels Evaluation ===")
+    print(f"Accuracy: {accuracy_score(y_true_shuffled, model_metrics[ 1 ]):.2%}")
+    print(f"Precision: {precision_score(y_true_shuffled, model_metrics[ 1 ]):.2%}")
+    print(f"Recall: {recall_score(y_true_shuffled, model_metrics[ 1 ]):.2%}")
+    print(f"F1 Score: {f1_score(y_true_shuffled, model_metrics[ 1 ]):.2%}")
 
 def start_analyzer() -> None:
     print( 'Loading Model...' )
