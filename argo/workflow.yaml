@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  name: analyzer-model-pipeline
+  name: analyzer-hyperparam-sweep
   namespace: argo-analyzer
 spec:
   entrypoint: pipeline
@@ -14,28 +14,6 @@ spec:
         value: "true"
       - name: test_model
         value: "true"
-      - name: model_path
-        value: "/mnt/data/saved_models/BinaryAlexNet/model.pt"
-
-      - name: num_workers
-        value: "4"
-
-      # Hyperparameters
-      - name: batch_size
-        value: "32"
-      - name: shuffle
-        value: "1"
-      - name: model_dropout
-        value: "0.5"
-      - name: training_weight_decay
-        value: "0.0"
-      - name: training_learning_rate
-        value: "0.001"
-      - name: training_epochs
-        value: "10"
-      - name: evaluation_threshold
-        value: "0.5"
-
   volumes:
     - name: argo-analyzer-training-volume
       persistentVolumeClaim:
@@ -49,21 +27,66 @@ spec:
     - name: shm-volume
       emptyDir:
         medium: Memory
-
   templates:
-
     - name: pipeline
       dag:
         tasks:
+          - name: read-hyperparams
+            template: read-json
 
+          - name: sweep-trial
+            template: train-eval-test
+            arguments:
+              parameters:
+                - name: model_path
+                  value: "{{item.model_path}}"
+                - name: batch_size
+                  value: "{{item.batch_size}}"
+                - name: shuffle
+                  value: "{{item.shuffle}}"
+                - name: num_workers
+                  value: "{{item.num_workers}}"
+                - name: model_dropout
+                  value: "{{item.model_dropout}}"
+                - name: training_weight_decay
+                  value: "{{item.training_weight_decay}}"
+                - name: training_learning_rate
+                  value: "{{item.training_learning_rate}}"
+                - name: training_epochs
+                  value: "{{item.training_epochs}}"
+                - name: evaluation_threshold
+                  value: "{{item.evaluation_threshold}}"
+            withParam: "{{tasks.read-hyperparams.outputs.parameters.hyperparams-list}}"
+            dependencies: [read-hyperparams]
+
+    - name: train-eval-test
+      inputs:
+        parameters:
+          - name: model_path
+          - name: batch_size
+          - name: shuffle
+          - name: num_workers
+          - name: model_dropout
+          - name: training_weight_decay
+          - name: training_learning_rate
+          - name: training_epochs
+          - name: evaluation_threshold
+          - name: force_training
+            value: "false"
+          - name: validate_model
+            value: "true"
+          - name: test_model
+            value: "true"
+      dag:
+        tasks:
           - name: check-model-exists
             template: check-model
             arguments:
               parameters:
                 - name: model_path
-                  value: "{{workflow.parameters.model_path}}"
+                  value: "{{inputs.parameters.model_path}}"
                 - name: force_training
-                  value: "{{workflow.parameters.force_training}}"
+                  value: "{{inputs.parameters.force_training}}"
 
           - name: train
             templateRef:
@@ -73,22 +96,22 @@ spec:
             arguments:
               parameters:
                 - name: model_path
-                  value: "{{workflow.parameters.model_path}}"
+                  value: "{{inputs.parameters.model_path}}"
                 - name: batch_size
-                  value: "{{workflow.parameters.batch_size}}"
+                  value: "{{inputs.parameters.batch_size}}"
                 - name: shuffle
-                  value: "{{workflow.parameters.shuffle}}"
+                  value: "{{inputs.parameters.shuffle}}"
                 - name: num_workers
-                  value: "{{workflow.parameters.num_workers}}"
+                  value: "{{inputs.parameters.num_workers}}"
                 - name: model_dropout
-                  value: "{{workflow.parameters.model_dropout}}"
+                  value: "{{inputs.parameters.model_dropout}}"
                 - name: training_weight_decay
-                  value: "{{workflow.parameters.training_weight_decay}}"
+                  value: "{{inputs.parameters.training_weight_decay}}"
                 - name: training_learning_rate
-                  value: "{{workflow.parameters.training_learning_rate}}"
+                  value: "{{inputs.parameters.training_learning_rate}}"
                 - name: training_epochs
-                  value: "{{workflow.parameters.training_epochs}}"
-            dependencies: [ check-model-exists ]
+                  value: "{{inputs.parameters.training_epochs}}"
+            dependencies: [check-model-exists]
             when: "{{tasks.check-model-exists.outputs.parameters.should_train}} == true"
 
           - name: validate
@@ -99,11 +122,11 @@ spec:
             arguments:
               parameters:
                 - name: model_path
-                  value: "{{workflow.parameters.model_path}}"
+                  value: "{{inputs.parameters.model_path}}"
                 - name: evaluation_threshold
-                  value: "{{workflow.parameters.evaluation_threshold}}"
-            dependencies: [ train ]
-            when: "{{workflow.parameters.validate_model}} == true"
+                  value: "{{inputs.parameters.evaluation_threshold}}"
+            dependencies: [train]
+            when: "{{inputs.parameters.validate_model}} == true"
 
           - name: test
             templateRef:
@@ -113,11 +136,11 @@ spec:
             arguments:
               parameters:
                 - name: model_path
-                  value: "{{workflow.parameters.model_path}}"
+                  value: "{{inputs.parameters.model_path}}"
                 - name: evaluation_threshold
-                  value: "{{workflow.parameters.evaluation_threshold}}"
-            dependencies: [ train ]
-            when: "{{workflow.parameters.test_model}} == true"
+                  value: "{{inputs.parameters.evaluation_threshold}}"
+            dependencies: [train]
+            when: "{{inputs.parameters.test_model}} == true"
 
     - name: check-model
       inputs:
@@ -137,12 +160,9 @@ spec:
             value: "{{inputs.parameters.model_path}}"
         source: |
           import os
-
           force_training = os.getenv("FORCE_TRAINING", "false").lower() == "true"
           model_path = os.getenv("MODEL_PATH", "/mnt/data/saved_models/BinaryAlexNet/model.pt")
-          print(f'Checking model at: {model_path}')
           should_train = force_training or not os.path.isfile(model_path)
-
           print("should_train =", should_train)
           with open("/tmp/output.txt", "w") as f:
               f.write(str(should_train).lower())
@@ -151,3 +171,26 @@ spec:
           - name: should_train
             valueFrom:
               path: /tmp/output.txt
+
+    - name: read-json
+      script:
+        image: python:3.10-slim
+        command: [ python ]
+        volumeMounts:
+          - name: argo-analyzer-training-volume
+            mountPath: /mnt/data
+        source: |
+          import json
+          with open("/mnt/data/hyperparams.json") as f:
+              data = json.load(f)
+          with open("/tmp/hyperparams.json", "w") as out:
+              json.dump(data, out)
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+      outputs:
+        parameters:
+          - name: hyperparams-list
+            valueFrom:
+              path: /tmp/hyperparams.json
