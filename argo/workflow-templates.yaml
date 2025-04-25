@@ -97,6 +97,8 @@ spec:
             value: "0"
           - name: EVALUATE
             value: "1"
+          - name: DATASET_SHUFFLE
+            value: "0"
           - name: EVALUATION_THRESHOLD
             value: "{{inputs.parameters.evaluation_threshold}}"
         volumeMounts:
@@ -111,10 +113,6 @@ spec:
             cpu: "500m"
           limits:
             cpu: "2"
-      tolerations:
-        - key: "node-role.kubernetes.io/control-plane"
-          operator: "Exists"
-          effect: "NoSchedule"
 
     - name: test-model
       inputs:
@@ -138,6 +136,8 @@ spec:
             value: "1"
           - name: EVALUATION_THRESHOLD
             value: "{{inputs.parameters.evaluation_threshold}}"
+          - name: DATASET_SHUFFLE
+            value: "0"
         volumeMounts:
           - name: argo-analyzer-testing-volume
             mountPath: /mnt/data/
@@ -150,7 +150,3 @@ spec:
             cpu: "500m"
           limits:
             cpu: "2"
-      tolerations:
-        - key: "node-role.kubernetes.io/control-plane"
-          operator: "Exists"
-          effect: "NoSchedule"

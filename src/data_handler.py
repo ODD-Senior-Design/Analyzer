@@ -1,13 +1,15 @@
+from random import sample
 from warnings import warn
 from dotenv import load_dotenv
 from roboflow import Roboflow
 from torchvision import transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 import torch
 
 from glob import glob
 from PIL import Image
 import pandas as pd
+import numpy as np
 
 from concurrent.futures import ThreadPoolExecutor
 from os import getenv, mkdir, path, listdir, remove, rename, walk
@@ -278,19 +280,26 @@ class CombinedDataset( torch.utils.data.Dataset ):
 
         return image, label
 
+def __get_balanced_sampler( labels: List[ int ] ) -> WeightedRandomSampler:
+    class_sample_counts = np.bincount( labels )  # e.g., [950, 50]
+    weights = 1. / class_sample_counts
+    sample_weights = [ weights[ label ] for label in labels ]
+    return WeightedRandomSampler( weights=sample_weights, num_samples=len( labels ), replacement=True )
 
 def get_combined_dataset_dataloader( combined_dataset_path: str, preprocess = True, batch_size: int = 32, shuffle: bool = True, num_workers: int = 2 ) -> DataLoader:
     transform = Preproccessor().get_transform() if preprocess else None
     combined_dataset = CombinedDataset( combined_dataset_path, transform )
+    labels = [ combined_dataset[i][1] for i in range( len( combined_dataset ) ) ]
+    sampler = __get_balanced_sampler( labels )
     return DataLoader(
         dataset=combined_dataset,
         batch_size=batch_size,
         shuffle=shuffle,
+        sampler=sampler,
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=True
     )
-
 
 def unpack( datasets_path: str, roboflow_api_key: Optional[ str ] = None, overwrite: bool = True, clean: bool = False, clean_max_workers: int = 8, no_exit = False) -> None:
     if not roboflow_api_key:

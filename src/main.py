@@ -142,7 +142,7 @@ def start_training() -> None:
     makedirs( f'{ model_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics', exist_ok=True )
 
     print( 'Training Model...' )
-    model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate, weight_decay=training_weight_decay ), epoch_metrics_save_path=epochs_metrics_path , loss_fn = BCEWithLogitsLoss(), num_epochs=training_epocs )
+    model.train_model( dataset=combined_dataset_dataloader, optimizer=Adam( model.parameters(), lr=training_learning_rate, weight_decay=training_weight_decay ), metrics_save_path=epochs_metrics_path , loss_fn = BCEWithLogitsLoss(), num_epochs=training_epocs )
 
     print( '\nTraining Model Completed!' )
 
