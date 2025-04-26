@@ -306,7 +306,7 @@ class CNN( Module ):
         predictions: np.ndarray = ( all_outputs_arr > 0.5 ).astype( float )
         return all_labels_arr, predictions
 
-    def test_image( self, image_tensor: torch.Tensor ) -> Any:
+    def test_image( self, image_tensor: torch.Tensor ) -> Tuple[ Module, torch.Tensor ]:
         with torch.no_grad():
             output = self( image_tensor )
             return output, self.__evaluation_function( output ).float()

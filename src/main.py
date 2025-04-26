@@ -63,13 +63,14 @@ def analyze_image_webhook() -> Response:
     return jsonify( { 'assessment': assessment, 'assessment_timestamp': datetime.now().strftime( datetime_format ) } )
 
 def analyze_image( image_path: str ) -> bool:
-
     image = Image.open( image_path )
-
     preprocess = Preproccessor()
     image_tensor = preprocess.process( image )
     image_tensor = image_tensor.unsqueeze( 0 )
-    return model.test_image( image_tensor )
+
+    prediction = float( model.test_image( image_tensor )[1] )
+    print( f"Image { image_path } has a {prediction * 100:.2f}% chance of Gingivitis; Verdict: { 'Positive' if prediction > 0.5 else 'Negative' }" )
+    return prediction > 0.5
 
 def validate_combined_dataset( surpress_warnings ) -> None:
     if path.exists( f'{ datasets_path }/combined_dataset' ):

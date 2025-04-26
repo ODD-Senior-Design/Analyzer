@@ -9,8 +9,8 @@ from model import CNN
 model = CNN()
 
 # === Configuration ===
-MODEL_PATH = "./base_model/trial-1_80_20_split_96_acc.pt"        # <-- Path to your trained model
-MODEL_PATH = "./base_model/base_model_922_acc.pt" #"./base_model/trial-1_80_20_split_96_acc.pt"        # <-- Path to your trained model
+MODEL_PATH = "./base_model/trial-1_calibrated_80_20_split_96_acc.pt"        # <-- Path to your trained model
+#MODEL_PATH = "./base_model/base_model_922_acc.pt" #"./base_model/trial-1_80_20_split_96_acc.pt"        # <-- Path to your trained model
 IMAGE_PATH = "./datasets/diego_1.jpg"     # <-- Path to the single image you want to test
 
 # === Image Preprocessing ===
