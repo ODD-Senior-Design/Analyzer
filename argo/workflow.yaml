@@ -10,10 +10,6 @@ spec:
     parameters:
       - name: force_training
         value: "false"
-      - name: validate_model
-        value: "true"
-      - name: test_model
-        value: "true"
   volumes:
     - name: argo-analyzer-training-volume
       persistentVolumeClaim:
@@ -126,7 +122,6 @@ spec:
                 - name: evaluation_threshold
                   value: "{{inputs.parameters.evaluation_threshold}}"
             dependencies: [train]
-            when: "{{inputs.parameters.validate_model}} == true"
 
           - name: test
             templateRef:
@@ -139,8 +134,7 @@ spec:
                   value: "{{inputs.parameters.model_path}}"
                 - name: evaluation_threshold
                   value: "{{inputs.parameters.evaluation_threshold}}"
-            dependencies: [train]
-            when: "{{inputs.parameters.test_model}} == true"
+            dependencies: [validate]
 
     - name: check-model
       inputs:

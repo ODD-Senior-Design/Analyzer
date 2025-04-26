@@ -5,6 +5,7 @@ import time
 import datetime
 from tqdm import tqdm
 from contextlib import nullcontext
+from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -13,8 +14,10 @@ import torch
 from torch.amp import grad_scaler
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
-from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout, BCEWithLogitsLoss
+from torch.nn import Module, Linear, ReLU, Conv2d, MaxPool2d, Sequential, AdaptiveAvgPool2d, Dropout, Parameter, functional as F
 from sklearn.metrics import accuracy_score
+from scipy.optimize import minimize
+
 from typing import List, Optional, Type, Tuple, Dict, Any
 
 class CNN( Module ):
@@ -25,6 +28,7 @@ class CNN( Module ):
         self.__evaluation_function = evaluation_function
         self.__device = device
         self._is_compiled = False
+        self.__temperature: Optional[ Parameter ] = None
 
         if model_class is None:
             model_class = self.BinaryAlexNet
@@ -73,7 +77,13 @@ class CNN( Module ):
             return x
 
     def forward( self, x: torch.Tensor ) -> torch.Tensor:
-        return self.model( x )
+        logits: torch.Tensor = self.model( x )
+        if self.__temperature is not None:
+            logits = logits / self.__temperature
+        return logits
+
+    def get_device( self ) -> torch.device:
+        return self.__device
 
     def plot_loss( self, title: str = 'Model Loss', save_path = './loss_chart.png' ) -> None:
         plt.plot( self.__loss_values, label = title )
@@ -90,6 +100,39 @@ class CNN( Module ):
         print( f"[INFO] Loss plot saved to: { save_path }" )
 
         plt.close()
+
+    def set_temperature( self, param: DataLoader | Parameter ) -> None:
+        self.to( self.__device )
+        self.eval()
+
+        if isinstance( param, Parameter ):
+            self.__temperature = param
+            return
+
+        logits_list: List[ torch.Tensor ] = []
+        labels_list: List[ torch.Tensor ] = []
+
+        with torch.no_grad():
+            for inputs, labels in param:
+                inputs = inputs.to( self.__device )
+                labels = labels.to( self.__device ).float().view( -1 )
+                outputs: torch.Tensor = self( inputs ).squeeze()
+
+                logits_list.append( outputs )
+                labels_list.append( labels )
+
+        logits: torch.Tensor = torch.cat( logits_list )
+        labels: torch.Tensor = torch.cat( labels_list )
+
+        def loss_fn( temp: Any ) -> float:
+            temp_tensor: torch.Tensor = torch.tensor( temp, requires_grad=True, device=self.__device )
+            loss: torch.Tensor = F.binary_cross_entropy_with_logits( logits / temp_tensor, labels )
+            return loss.item()
+
+        res = minimize( loss_fn, x0=[1.5], bounds=[(0.05, 5.0)], method='L-BFGS-B')
+        self.__temperature = Parameter( torch.tensor( [ res.x[0] ], device=self.__device ) )
+
+        print( f'Optimal Temperature Found: {self.__temperature.item():.4f}' )
 
     def train_model( self, dataset: DataLoader, optimizer: Optimizer, loss_fn: Module, metrics_save_path: str, num_epochs: int = 10, scheduler: Optional[Any] = None, accumulation_steps: int = 1, early_stop_patience: int = 5, seed: int = 42 ) -> None:
         # Reproducibility
@@ -263,10 +306,10 @@ class CNN( Module ):
         predictions: np.ndarray = ( all_outputs_arr > 0.5 ).astype( float )
         return all_labels_arr, predictions
 
-    def test_image( self, image_tensor: torch.Tensor ) -> bool:
+    def test_image( self, image_tensor: torch.Tensor ) -> Any:
         with torch.no_grad():
-            output: torch.Tensor = self( image_tensor )
-            return self.__evaluation_function( output ).float() > 0.5
+            output = self( image_tensor )
+            return output, self.__evaluation_function( output ).float()
 
     def save_model( self, model_save_path: str ) -> str:
         if not model_save_path:
@@ -278,14 +321,28 @@ class CNN( Module ):
         return model_save_path
 
     def load_model( self, model_path: str ) -> None:
-
         if not ( model_path.endswith( '.pth' ) or model_path.endswith( '.pt' ) ):
             raise ValueError( 'Model file must be a PyTorch (.pth/.pt) file' )
 
         if not os.path.exists( model_path ):
             raise FileNotFoundError( f'Model file not found at { model_path }' )
 
-        self.load_state_dict( torch.load( model_path, map_location=self.__device ) )
+        full_state_dict = torch.load( model_path, map_location=self.__device )
+
+        filtered_state_dict = { k: v for k, v in full_state_dict.items() if not k.endswith( "__temperature" ) }
+
+        missing_keys, unexpected_keys = self.load_state_dict( filtered_state_dict, strict=False )
+
+        if unexpected_keys:
+            warn( f"Ignored unexpected keys during loading: { unexpected_keys }", ImportWarning )
+
+        if missing_keys:
+            print( f"Missing expected keys during loading: { missing_keys }", ImportWarning )
+
+        if "_CNN__temperature" in full_state_dict and hasattr( self, "_CNN__temperature" ):
+            self.set_temperature( Parameter( full_state_dict[ "_CNN__temperature" ].to( self.__device ) ) )
+            print( "Loaded temperature parameter." )
+
         self.to( self.__device )
         self.eval()
         print( f"Model loaded from { model_path }" )

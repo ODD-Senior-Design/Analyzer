@@ -49,7 +49,8 @@ debug: bool = getenv( "DEBUG" ) == '1'
 bind_address: str = getenv( "BIND_ADDRESS" ) or '0.0.0.0'
 bind_port: int = int( getenv( "BIND_PORT" ) or 9000 )
 
-model = CNN( model_kwargs={ 'dropout': model_dropout }, device=torch.device( 'cuda' if torch.cuda.is_available() else 'cpu' ),  )
+model = CNN( model_kwargs={ 'dropout': model_dropout }, device=torch.device( 'cuda' if torch.cuda.is_available() else 'cpu' ) )
+
 
 @webhook.route( "/analyze", methods=[ "POST" ] )
 def analyze_image_webhook() -> Response:
@@ -62,6 +63,7 @@ def analyze_image_webhook() -> Response:
     return jsonify( { 'assessment': assessment, 'assessment_timestamp': datetime.now().strftime( datetime_format ) } )
 
 def analyze_image( image_path: str ) -> bool:
+
     image = Image.open( image_path )
 
     preprocess = Preproccessor()
@@ -131,6 +133,7 @@ def save_metrics( model_metrics: Tuple[ np.ndarray, np.ndarray ], raw_model_metr
     return metrics_file_path, metrics, confusion_matrix_file_path, confusion_matrix_df
 
 def start_training() -> None:
+
     print( 'Validating Combined Dataset...' )
     validate_combined_dataset( surpress_warnings=surpress_dataset_warnings )
 
@@ -152,6 +155,7 @@ def start_training() -> None:
     model.plot_loss( save_path=f'{ model_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics/{ path.basename( model_path ).split( '.' )[0] }_loss_chart_{ datetime.now().strftime( datetime_format ) }.png' )
 
 def start_evaluation() -> None:
+
     print( 'Validating Combined Dataset...' )
     validate_combined_dataset( surpress_warnings = surpress_dataset_warnings )
 
@@ -160,6 +164,12 @@ def start_evaluation() -> None:
 
     print( 'Loading model...' )
     model.load_model( saved_model_path )
+
+    print( 'Temperature calibrating model...' )
+    model.set_temperature( validation_loader )
+
+    print( 'Saving calibrated model...' )
+    model.save_model( saved_model_path )
 
     print( 'Starting evaluation...' )
     model.evaluate_model( validation_loader, evaluation_threshold )
@@ -174,6 +184,7 @@ def start_evaluation() -> None:
     print( f"Evaluation metrics saved to: { evaluation_metrics_path }" )
 
 def start_testing() -> None:
+
     print( 'Validating Combined Dataset...' )
     validate_combined_dataset( surpress_warnings = surpress_dataset_warnings )
 
@@ -202,7 +213,7 @@ def start_testing() -> None:
     print( f"Test metrics saved to: { test_metrics_path }" )
     print( f"Confusion Matrix:\n{ confusion_matrix_df }" )
     print( f"Confusion matrix saved to: { confusion_matrix_path }" )
-    
+
     y_true_shuffled = np.random.permutation( model_metrics[ 0 ] )
 
     print("\n=== Shuffled Labels Evaluation ===")
