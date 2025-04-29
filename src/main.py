@@ -3,10 +3,11 @@ from dotenv import load_dotenv
 from warnings import warn
 
 from PIL import Image
+from base64 import b64decode
 from datetime import datetime
 from typing import Dict, Optional, Tuple, Any
 
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, abort
 
 import torch
 from torch.optim import Adam
@@ -55,21 +56,24 @@ model = CNN( model_kwargs={ 'dropout': model_dropout }, device=torch.device( 'cu
 @webhook.route( "/analyze", methods=[ "POST" ] )
 def analyze_image_webhook() -> Response:
     image_metadata: Dict[ str, str ] = request.get_json()
-    image_path = image_metadata.get( 'uri', '' ).strip( 'file://' )
-
-    # Analyze image and propogate errors
-    assessment: bool = analyze_image( image_path )
+    image_path = image_metadata.get( 'uri', '' ).replace( 'file://', '' )
+    image_base64 = image_metadata.get( 'base64_image', '' )
+    if not path.isfile( image_path ) and not image_base64:
+        abort( 404, f"No image file found at '{ image_path }' and no base64 image string provided. Please provide either/or, File path takes precedence." )
+    
+    image_base64 = b64decode( image_base64 )
+    assessment: bool = analyze_image( image_path or image_base64 )
 
     return jsonify( { 'assessment': assessment, 'assessment_timestamp': datetime.now().strftime( datetime_format ) } )
 
-def analyze_image( image_path: str ) -> bool:
-    image = Image.open( image_path )
+def analyze_image( image_data: str | bytes ) -> bool:
+    image = Image.open( image_data )
     preprocess = Preproccessor()
     image_tensor = preprocess.process( image )
     image_tensor = image_tensor.unsqueeze( 0 )
 
     prediction = float( model.test_image( image_tensor )[1] )
-    print( f"Image { image_path } has a {prediction * 100:.2f}% chance of Gingivitis; Verdict: { 'Positive' if prediction > 0.5 else 'Negative' }" )
+    print( f"Image { image } has a {prediction * 100:.2f}% chance of Gingivitis; Verdict: { 'Positive' if prediction > 0.5 else 'Negative' }" )
     return prediction > 0.5
 
 def validate_combined_dataset( surpress_warnings ) -> None:
