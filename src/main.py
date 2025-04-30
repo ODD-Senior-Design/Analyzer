@@ -59,11 +59,6 @@ def analyze_image_webhook() -> Response:
     image_base64 = image_metadata.get( 'base64_image', '' )
     if not path.isfile( image_path ) and not image_base64:
         abort( 404, f"No image file found at '{ image_path }' and no base64 image string provided. Please provide either/or, File path takes precedence." )
-<<<<<<< Updated upstream
-    
-=======
-
->>>>>>> Stashed changes
     image_base64 = b64decode( image_base64 )
     assessment: bool = analyze_image( image_path or image_base64 )
 
@@ -75,14 +70,10 @@ def analyze_image( image_data: str | bytes ) -> bool:
     image_tensor = preprocess.process( image )
     image_tensor = image_tensor.unsqueeze( 0 )
 
-<<<<<<< Updated upstream
-    prediction = float( model.test_image( image_tensor )[1] )
-=======
     with torch.no_grad():
         output = model( image_tensor.to( model.get_device() ) )
         prediction = torch.sigmoid( output ).item()
 
->>>>>>> Stashed changes
     print( f"Image { image } has a {prediction * 100:.2f}% chance of Gingivitis; Verdict: { 'Positive' if prediction > 0.5 else 'Negative' }" )
     return prediction > 0.5
 
