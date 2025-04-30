@@ -13,6 +13,7 @@ torchvision = "*"
 scikit-learn = "*"
 pandas = "*"
 cleanvision = "*"
+gunicord = {extras = ["eventlet"], version = "*"}
 
 [dev-packages]
 
