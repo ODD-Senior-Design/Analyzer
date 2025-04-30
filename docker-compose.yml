@@ -10,7 +10,7 @@ services:
       # App config
       - DEBUG=0
       - WEBHOOK_NAME="Analyzer_webhook"
-      - SAVED_MODEL_PATH="./base_model/model_traced.pt"
+      - SAVED_MODEL_PATH=/app/base_model/model_traced.pt
       - BIND_ADDRESS=0.0.0.0
       - BIND_PORT=6000
       - DATETIME_FORMAT="%Y-%m-%dT%H:%M:%S"

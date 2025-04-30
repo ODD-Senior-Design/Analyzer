@@ -1,3 +1,4 @@
+from io import BytesIO
 from os import getenv, makedirs, path
 from dotenv import load_dotenv
 from warnings import warn
@@ -65,7 +66,7 @@ def analyze_image_webhook() -> Response:
     return jsonify( { 'assessment': assessment, 'assessment_timestamp': datetime.now().strftime( datetime_format ) } )
 
 def analyze_image( image_data: str | bytes ) -> bool:
-    image = Image.open( image_data )
+    image = Image.open( image_data ) if type( image_data ) == str else Image.open( BytesIO( image_data ) )
     preprocess = Preproccessor()
     image_tensor = preprocess.process( image )
     image_tensor = image_tensor.unsqueeze( 0 )
