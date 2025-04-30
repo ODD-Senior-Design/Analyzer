@@ -311,27 +311,48 @@ class CNN( Module ):
             output = self( image_tensor )
             return output, self.__evaluation_function( output ).float()
 
-    def save_model( self, model_save_path: str ) -> str:
+    def save_model( self, model_save_path: str, save_traced: bool = False, example_input: Optional[ torch.Tensor ] = None, rm_full_model: bool = False ) -> Tuple[ Optional[ str ], Optional[ str ] ]:
         if not model_save_path:
-            timestamp = datetime.datetime.now().strftime( "%Y%m%d_%H%M%S" )
+            timestamp: str = datetime.datetime.now().strftime( "%Y%m%d_%H%M%S" )
             model_save_path = f"./saved_models/{ self.model.__class__.__name__ }/model_{ timestamp }.pt"
 
-        os.makedirs( os.path.dirname( model_save_path ), exist_ok=True )
+        os.makedirs( os.path.dirname( model_save_path ), exist_ok = True )
         torch.save( self.state_dict(), model_save_path )
-        return model_save_path
+        print( f"State dict saved to: { model_save_path }" )
 
-    def load_model( self, model_path: str ) -> None:
+        traced_model_path: Optional[ str ] = None
+        if save_traced:
+            example_input = example_input or torch.randn( 1, 3, 224, 224 ).to( self.__device )
+
+            self.eval()
+            traced_model: torch.jit.ScriptModule = torch.jit.trace( self, example_input )
+            traced_model_path = model_save_path.replace( ".pt", "_traced.pt" )
+            traced_model.save( traced_model_path )
+
+        if rm_full_model:
+            os.remove( model_save_path )
+            model_save_path = ''
+
+        return model_save_path or None, traced_model_path or None
+
+    def load_model( self, model_path: str, traced: bool = False ) -> None:
         if not ( model_path.endswith( '.pth' ) or model_path.endswith( '.pt' ) ):
             raise ValueError( 'Model file must be a PyTorch (.pth/.pt) file' )
 
         if not os.path.exists( model_path ):
             raise FileNotFoundError( f'Model file not found at { model_path }' )
 
-        full_state_dict = torch.load( model_path, map_location=self.__device )
+        if traced:
+            traced_model: torch.jit.ScriptModule = torch.jit.load( model_path, map_location = self.__device )
+            self.model = traced_model
+            self.eval()
+            print( f"Traced model loaded from: { model_path }" )
+            return
 
+        full_state_dict = torch.load( model_path, map_location = self.__device )
         filtered_state_dict = { k: v for k, v in full_state_dict.items() if not k.endswith( "__temperature" ) }
 
-        missing_keys, unexpected_keys = self.load_state_dict( filtered_state_dict, strict=False )
+        missing_keys, unexpected_keys = self.load_state_dict( filtered_state_dict, strict = False )
 
         if unexpected_keys:
             warn( f"Ignored unexpected keys during loading: { unexpected_keys }", ImportWarning )
@@ -345,4 +366,4 @@ class CNN( Module ):
 
         self.to( self.__device )
         self.eval()
-        print( f"Model loaded from { model_path }" )
+        print( f"Model loaded from: { model_path }" )

@@ -48,10 +48,9 @@ train: bool = getenv( "TRAIN" ) == '1'
 webhook: Flask = Flask( getenv( "WEBHOOK_NAME" ) or 'Analyzer webhook' )
 debug: bool = getenv( "DEBUG" ) == '1'
 bind_address: str = getenv( "BIND_ADDRESS" ) or '0.0.0.0'
-bind_port: int = int( getenv( "BIND_PORT" ) or 9000 )
+bind_port: int = int( getenv( "BIND_PORT" ) or 6000 )
 
 model = CNN( model_kwargs={ 'dropout': model_dropout }, device=torch.device( 'cuda' if torch.cuda.is_available() else 'cpu' ) )
-
 
 @webhook.route( "/analyze", methods=[ "POST" ] )
 def analyze_image_webhook() -> Response:
@@ -60,7 +59,11 @@ def analyze_image_webhook() -> Response:
     image_base64 = image_metadata.get( 'base64_image', '' )
     if not path.isfile( image_path ) and not image_base64:
         abort( 404, f"No image file found at '{ image_path }' and no base64 image string provided. Please provide either/or, File path takes precedence." )
+<<<<<<< Updated upstream
     
+=======
+
+>>>>>>> Stashed changes
     image_base64 = b64decode( image_base64 )
     assessment: bool = analyze_image( image_path or image_base64 )
 
@@ -72,7 +75,14 @@ def analyze_image( image_data: str | bytes ) -> bool:
     image_tensor = preprocess.process( image )
     image_tensor = image_tensor.unsqueeze( 0 )
 
+<<<<<<< Updated upstream
     prediction = float( model.test_image( image_tensor )[1] )
+=======
+    with torch.no_grad():
+        output = model( image_tensor.to( model.get_device() ) )
+        prediction = torch.sigmoid( output ).item()
+
+>>>>>>> Stashed changes
     print( f"Image { image } has a {prediction * 100:.2f}% chance of Gingivitis; Verdict: { 'Positive' if prediction > 0.5 else 'Negative' }" )
     return prediction > 0.5
 
@@ -154,10 +164,10 @@ def start_training() -> None:
 
     print( '\nTraining Model Completed!' )
 
-    model_path = model.save_model( saved_model_path )
-    print( 'Model state dict saved to:', model_path )
+    model_path, _ = model.save_model( saved_model_path )
+    print( f'Model state dict saved to: { model_path }' )
 
-    model.plot_loss( save_path=f'{ model_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics/{ path.basename( model_path ).split( '.' )[0] }_loss_chart_{ datetime.now().strftime( datetime_format ) }.png' )
+    model.plot_loss( save_path=f'{ model_dir }/{ path.basename( saved_model_path ).split( '.' )[0] }_metrics/{ path.basename( str( model_path ) ).split( '.' )[0] }_loss_chart_{ datetime.now().strftime( datetime_format ) }.png' )
 
 def start_evaluation() -> None:
 
@@ -173,8 +183,8 @@ def start_evaluation() -> None:
     print( 'Temperature calibrating model...' )
     model.set_temperature( validation_loader )
 
-    print( 'Saving calibrated model...' )
-    model.save_model( saved_model_path )
+    print( 'Saving calibrated model with traced version as well...' )
+    model.save_model( saved_model_path, save_traced=True )
 
     print( 'Starting evaluation...' )
     model.evaluate_model( validation_loader, evaluation_threshold )
@@ -203,7 +213,9 @@ def start_testing() -> None:
     )
 
     print( 'Loading model...' )
-    model.load_model( saved_model_path )
+    traced_model_path = saved_model_path.replace( '.pt', '_traced.pt' if '_traced.pt' not in saved_model_path else '.pt' )
+    load_traced = path.exists( traced_model_path )
+    model.load_model( traced_model_path if load_traced else saved_model_path, traced=load_traced )
 
     print( 'Starting testing...' )
     model.evaluate_model( testing_loader, evaluation_threshold )
@@ -221,18 +233,20 @@ def start_testing() -> None:
 
     y_true_shuffled = np.random.permutation( model_metrics[ 0 ] )
 
-    print("\n=== Shuffled Labels Evaluation ===")
-    print(f"Accuracy: {accuracy_score(y_true_shuffled, model_metrics[ 1 ]):.2%}")
-    print(f"Precision: {precision_score(y_true_shuffled, model_metrics[ 1 ]):.2%}")
-    print(f"Recall: {recall_score(y_true_shuffled, model_metrics[ 1 ]):.2%}")
-    print(f"F1 Score: {f1_score(y_true_shuffled, model_metrics[ 1 ]):.2%}")
+    print( "\n=== Shuffled Labels Evaluation ===" )
+    print( f"Accuracy: {accuracy_score( y_true_shuffled, model_metrics[ 1 ] ):.2%}" )
+    print( f"Precision: {precision_score( y_true_shuffled, model_metrics[ 1 ] ):.2%}" )
+    print( f"Recall: {recall_score( y_true_shuffled, model_metrics[ 1 ] ):.2%}" )
+    print( f"F1 Score: {f1_score( y_true_shuffled, model_metrics[ 1 ] ):.2%}" )
 
-def start_analyzer() -> None:
+def start_analyzer() -> Flask:
     print( 'Loading Model...' )
-    model.load_model( saved_model_path )
+    model.load_model( saved_model_path, traced=True )
 
     print( 'Starting Webhook...' )
-    webhook.run( host=bind_address, port=bind_port, debug=debug )
+    if debug:
+        webhook.run( host=bind_address, port=bind_port, debug=debug )
+    return webhook
 
 def main() -> None:
     print( 'Loading .env file if present...' )
@@ -255,4 +269,7 @@ def main() -> None:
         start_analyzer()
 
 if __name__ == "__main__":
+    debug = True
     main()
+
+app = start_analyzer() #* Gunicorn needs it to be defined to a variable

@@ -1,10 +1,9 @@
 # test_single_image.py
 
-import torch
 from PIL import Image
 
 from data_handler import Preproccessor
-from model import CNN
+from src.model import CNN
 
 model = CNN()
 

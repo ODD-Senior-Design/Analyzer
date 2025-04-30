@@ -1,0 +1,30 @@
+
+services:
+  analyzer:
+    image: registry.ranga-family.com/analyzer:latest
+    container_name: analyzer
+    restart: unless-stopped
+    ports:
+      - "6000:6000"
+    environment:
+      # App config
+      - DEBUG=0
+      - WEBHOOK_NAME="Analyzer_webhook"
+      - SAVED_MODEL_PATH="./base_model/model_traced.pt"
+      - BIND_ADDRESS="0.0.0.0"
+      - BIND_PORT=9000
+      - DATETIME_FORMAT="%Y-%m-%dT%H:%M:%S"
+
+      # Gunicorn config
+      - GUNICORN_WORKER_CLASS=eventlet
+      - GUNICORN_NUM_WORKERS=1
+      - GUNICORN_LOG_LEVEL=info
+      - GUNICORN_KEEPALIVE=5
+      - GUNICORN_TIMEOUT=30
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]   # Automatically requests a GPU
+    stdin_open: true
+    tty: true

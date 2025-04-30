@@ -1,0 +1,7 @@
+*.pt filter=lfs diff=lfs merge=lfs -text
+base_model/base_model_922_acc.pt filter=lfs diff=lfs merge=lfs -text
+base_model/model_traced.pt filter=lfs diff=lfs merge=lfs -text
+base_model/trial-1_80_20_split_96_acc.pt filter=lfs diff=lfs merge=lfs -text
+base_model/trial-1_calibrated_80_20_split_96_acc.pt filter=lfs diff=lfs merge=lfs -text
+base_model/trial-1_calibrated_80_20_split_96_acc_traced.pt filter=lfs diff=lfs merge=lfs -text
+base_model/*.pt filter=lfs diff=lfs merge=lfs -text

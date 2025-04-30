@@ -32,7 +32,7 @@ spec:
           - name: training_learning_rate
           - name: training_epochs
       container:
-        image: eliteabhi/analyzer:argo
+        image: registry.ranga-family.com/analyzer:argo
         imagePullPolicy: Always
         workingDir: /app
         command: [ "python" ]
@@ -83,7 +83,7 @@ spec:
           - name: model_path
           - name: evaluation_threshold
       container:
-        image: eliteabhi/analyzer:argo
+        image: registry.ranga-family.com/analyzer:argo
         imagePullPolicy: Always
         workingDir: /app
         command: [ "python" ]
@@ -120,7 +120,7 @@ spec:
           - name: model_path
           - name: evaluation_threshold
       container:
-        image: eliteabhi/analyzer:argo
+        image: registry.ranga-family.com/analyzer:argo
         imagePullPolicy: Always
         workingDir: /app
         command: [ "python" ]
